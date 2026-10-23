@@ -30,10 +30,10 @@ public class LoreKeeper {
 
     private final ChatClient chatClient;
 
-    private static final String SYSTEM_PROMPT = "扮演深耕恋爱心理领域的专家。开场向用户表明身份，告知用户可倾诉恋爱难题。" +
-            "围绕单身、恋爱、已婚三种状态提问：单身状态询问社交圈拓展及追求心仪对象的困扰；" +
-            "恋爱状态询问沟通、习惯差异引发的矛盾；已婚状态询问家庭责任与亲属关系处理的问题。" +
-            "引导用户详述事情经过、对方反应及自身想法，以便给出专属解决方案。";
+    private static final String SYSTEM_PROMPT = "你是 LoreKeeper，一位专注于网文创作的设定守护者。开场向用户表明身份，告知可协助管理世界观设定、角色卡、章节设定与伏笔追踪。" +
+            "围绕世界观、角色、情节三条主线提问：世界观询问地域/势力/规则设定；" +
+            "角色询问人物关系与成长弧光；情节询问时间线事件与伏笔。" +
+            "引导用户详述创作设定与章节内容，以便提供一致性校验与创作建议。";
 
     /**
      * 初始化 AI客户端 ChatClient
@@ -96,38 +96,38 @@ public class LoreKeeper {
 
     }
 
-    record LoveReport(String title, List<String> suggestions){
+    record ConsistencyReport(String title, List<String> suggestions){
 
     }
 
     /**
-     * AI 恋爱报告功能（实战结构化输出）
+     * AI 设定一致性审查功能（结构化输出，步骤 2.4 改造为 reviewChapter）
      * @param message
      * @param chatId
      * @return
      */
-    public LoveReport doChatWithReport(String message, String chatId){
-        LoveReport loveReport = chatClient
+    public ConsistencyReport doChatWithReport(String message, String chatId){
+        ConsistencyReport consistencyReport = chatClient
                 .prompt()
-                .system(SYSTEM_PROMPT + "每次对话后都要生成恋爱接结果，标题为{用户名}的恋爱报告，内容为建议列表")
+                .system(SYSTEM_PROMPT + "每次对话后都要生成设定审查结果，标题为{用户名}的设定报告，内容为建议列表")
                 .user(message)
                 .advisors(spec -> spec.param(CHAT_MEMORY_CONVERSATION_ID_KEY, chatId)
                         .param(CHAT_MEMORY_RETRIEVE_SIZE_KEY, 10))
                 .call()
-                .entity(LoveReport.class);
+                .entity(ConsistencyReport.class);
 
-        log.info("loveReport:{}",loveReport);
-        return loveReport;
+        log.info("consistencyReport:{}",consistencyReport);
+        return consistencyReport;
 
     }
 
 
-    // AI恋爱知识库问答功能（RAG 检索使用 pgvector 持久化向量库，步骤 1.3）
+    // AI 设定库问答功能（RAG 检索使用 pgvector 持久化向量库，步骤 1.3）
     @Resource(name = "pgVectorVectorStore")
     private VectorStore loreVectorStore;
 
     @Resource
-    private Advisor loveAppRagCloudAdvisor;
+    private Advisor loreRagCloudAdvisor;
 
     @Resource
     private QueryRewriter queryRewriter;
@@ -153,12 +153,12 @@ public class LoreKeeper {
                 // 应用 RAG 知识库问答
                 .advisors(new QuestionAnswerAdvisor(loreVectorStore))
                 // 应用 RAG 检索增强服务（云知识库服务）
-//                .advisors(loveAppRagCloudAdvisor)
+//                .advisors(loreRagCloudAdvisor)
                 // 应用 RAG 检索增强服务（基于 PgVector 向量存储）
 //                .advisors(new QuestionAnswerAdvisor(loreVectorStore))
                 // 应用自定义的 RAG 检索增强服务（文档查询器 + 上下文增强器）
 //                .advisors(
-//                        LoveAppRagCustomAdvisorFactory.createLoveAppRagCustomAdvisor(
+//                        LoreRagCustomAdvisorFactory.createLoreRagCustomAdvisor(
 //                                loreVectorStore,"单身"
 //                        )
 //                )
@@ -171,12 +171,12 @@ public class LoreKeeper {
 
     }
 
-    // AI 恋爱知识库调用工具能力
+    // AI 设定库调用工具能力
     @Resource
     private ToolCallback[] allTools;
 
     /**
-     * AI 恋爱报告功能（支持调用工具）
+     * AI 设定审查功能（支持调用工具）
      * @param message
      * @param chatId
      * @return
@@ -204,7 +204,7 @@ public class LoreKeeper {
     private ToolCallbackProvider toolCallbackProvider;
 
     /**
-     * AI 恋爱报告功能（调用 MCP 服务）
+     * AI 设定审查功能（调用 MCP 服务）
      * @param message
      * @param chatId
      * @return

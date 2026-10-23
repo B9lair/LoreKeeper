@@ -13,12 +13,12 @@ import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
  * 创建自定义的 RAG 检索增强顾问工厂
  */
 @Slf4j
-public class LoveAppRagCustomAdvisorFactory {
+public class LoreRagCustomAdvisorFactory {
     /**
      * 创建自定义的 RAG 检索增强顾问
      * @return
      */
-    public static Advisor createLoveAppRagCustomAdvisor(VectorStore vectorStore,String status){
+    public static Advisor createLoreRagCustomAdvisor(VectorStore vectorStore,String status){
 
         // 过滤特定状态的工厂
         Filter.Expression expression = new FilterExpressionBuilder()
@@ -34,7 +34,7 @@ public class LoveAppRagCustomAdvisorFactory {
 
         return RetrievalAugmentationAdvisor.builder()
                 .documentRetriever(documentRetriever)
-                .queryAugmenter(LoveAppContextualQueryAugmenterFactory.createInstance())
+                .queryAugmenter(LoreContextualQueryAugmenterFactory.createInstance())
                 .build();
     }
 

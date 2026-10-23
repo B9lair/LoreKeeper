@@ -18,7 +18,7 @@
 
         <div class="hero-actions">
           <RouterLink to="/manus" class="neo-button primary">进入超级智能体</RouterLink>
-          <RouterLink to="/love-app" class="neo-button ghost">进入恋爱大师</RouterLink>
+          <RouterLink to="/lore-keeper" class="neo-button ghost">进入设定守护者</RouterLink>
         </div>
       </div>
 
@@ -32,13 +32,13 @@
           </div>
 
           <div class="panel-body">
-            <RouterLink to="/love-app" class="app-tile love">
+            <RouterLink to="/lore-keeper" class="app-tile lore">
               <div class="tile-top">
-                <span class="chip">LOVE</span>
+                <span class="chip">LORE</span>
                 <span class="chip subtle">SSE</span>
               </div>
-              <div class="tile-title">AI 恋爱大师</div>
-              <div class="tile-desc">情感分析 · 恋爱建议 · 流式对话</div>
+              <div class="tile-title">LoreKeeper 设定守护者</div>
+              <div class="tile-desc">设定一致性 · 伏笔追踪 · 流式对话</div>
             </RouterLink>
 
             <RouterLink to="/manus" class="app-tile manus">

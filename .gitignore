@@ -4,6 +4,7 @@ application-prod.yml
 node_modules/
 dist/
 tmp
+.codebuddy/
 
 
 HELP.md

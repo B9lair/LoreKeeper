@@ -1,8 +1,8 @@
 <template>
   <ChatLayout
-    :title="'AI 恋爱大师'"
-    :ai-name="'恋爱大师'"
-    :ai-avatar="loveAvatar"
+    :title="'LoreKeeper 设定守护者'"
+    :ai-name="'设定守护者'"
+    :ai-avatar="loreAvatar"
     :chat-id="chatId"
     :build-sse-url="buildSseUrl"
   />
@@ -11,14 +11,14 @@
 <script setup>
 import { onMounted, ref } from 'vue';
 import ChatLayout from '../components/ChatLayout.vue';
-import loveAvatar from '../assets/ai-love.svg';
+import loreAvatar from '../assets/ai-lore.svg';
 
 const chatId = ref('');
 
 const generateChatId = () => {
   const random = Math.random().toString(36).slice(2, 8);
   const timestamp = Date.now().toString(36);
-  return `love-${timestamp}-${random}`;
+  return `lore-${timestamp}-${random}`;
 };
 
 onMounted(() => {
@@ -28,7 +28,7 @@ onMounted(() => {
 const buildSseUrl = (message, currentChatId) => {
   const apiBase =
     process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:8080/api';
-  const base = `${apiBase}/ai/love_app/chat/sse`;
+  const base = `${apiBase}/ai/lore/chat/sse`;
   const params = new URLSearchParams({
     message,
     chatId: currentChatId
@@ -36,4 +36,3 @@ const buildSseUrl = (message, currentChatId) => {
   return `${base}?${params.toString()}`;
 };
 </script>
-

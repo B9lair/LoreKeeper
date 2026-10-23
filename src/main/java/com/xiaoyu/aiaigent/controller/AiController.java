@@ -29,36 +29,36 @@ public class AiController {
     private ChatModel dashscopeChatModel;
 
     /**
-     * 同步调用 AI 恋爱大师应用
+     * 同步调用 LoreKeeper 应用
      * @param message
      * @param chatId
      * @return
      */
-    @GetMapping("/love_app/chat/sync")
-    public String doChatWithLoveAppSync(String message, String chatId) {
+    @GetMapping("/lore/chat/sync")
+    public String doChatWithLoreSync(String message, String chatId) {
         return loreKeeper.doChat(message, chatId);
     }
 
     /**
-     * SSE 流式调用 AI 恋爱大师应用1
+     * SSE 流式调用 LoreKeeper 应用1
      * @param message
      * @param chatId
      * @return
      */
-    @GetMapping(value = "/love_app/chat/sse", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<String> doChatWithLoveAppSSE(String message, String chatId) {
+    @GetMapping(value = "/lore/chat/sse", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<String> doChatWithLoreSSE(String message, String chatId) {
         return loreKeeper.doChatByStream(message, chatId);
     }
 
 
     /**
-     * SSE 流式调用 AI 恋爱大师应用2
+     * SSE 流式调用 LoreKeeper 应用2
      * @param message
      * @param chatId
      * @return
      */
-    @GetMapping(value = "/love_app/chat/sse")
-    public Flux<ServerSentEvent<String>> doChatWithLoveAppServerSentEvent(String message, String chatId) {
+    @GetMapping(value = "/lore/chat/sse")
+    public Flux<ServerSentEvent<String>> doChatWithLoreServerSentEvent(String message, String chatId) {
         return loreKeeper.doChatByStream(message, chatId)
                 .map(chunk -> ServerSentEvent.<String>builder()
                         .data(chunk)
@@ -67,13 +67,13 @@ public class AiController {
 
 
     /**
-     * SSE 流式调用 AI 恋爱大师应用3
+     * SSE 流式调用 LoreKeeper 应用3
      * @param message
      * @param chatId
      * @return
      */
-    @GetMapping("/love_app/chat/sse/emitter")
-    public SseEmitter doChatWithLoveAppSseEmitter(String message, String chatId) {
+    @GetMapping("/lore/chat/sse/emitter")
+    public SseEmitter doChatWithLoreSseEmitter(String message, String chatId) {
         // 创建一个超时时间较长的 SseEmitter
         SseEmitter emitter = new SseEmitter(180000L); // 3分钟超时
         // 获取 Flux 数据流并直接订阅

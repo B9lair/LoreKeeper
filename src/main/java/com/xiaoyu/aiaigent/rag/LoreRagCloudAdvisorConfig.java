@@ -18,15 +18,15 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration
 @Slf4j
-class LoveAppRagCloudAdvisorConfig {
+class LoreRagCloudAdvisorConfig {
 
     @Value("${spring.ai.dashscope.api-key}")
     private String dashScopeApiKey;
 
     @Bean
-    public Advisor loveAppRagCloudAdvisor() {
+    public Advisor loreRagCloudAdvisor() {
         DashScopeApi dashScopeApi = new DashScopeApi(dashScopeApiKey);
-        final String KNOWLEDGE_INDEX = "恋爱大师";
+        final String KNOWLEDGE_INDEX = "LoreKeeper设定库";
         DocumentRetriever documentRetriever = new DashScopeDocumentRetriever(dashScopeApi,
                 DashScopeDocumentRetrieverOptions.builder()
                         .withIndexName(KNOWLEDGE_INDEX)
@@ -36,4 +36,3 @@ class LoveAppRagCloudAdvisorConfig {
                 .build();
     }
 }
-

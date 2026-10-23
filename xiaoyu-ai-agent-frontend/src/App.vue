@@ -10,7 +10,7 @@
       </div>
       <nav class="nav-links">
         <RouterLink to="/">主页</RouterLink>
-        <RouterLink to="/love-app">AI 恋爱大师</RouterLink>
+        <RouterLink to="/lore-keeper">LoreKeeper 设定守护者</RouterLink>
         <RouterLink to="/manus">AI 超级智能体</RouterLink>
       </nav>
     </header>

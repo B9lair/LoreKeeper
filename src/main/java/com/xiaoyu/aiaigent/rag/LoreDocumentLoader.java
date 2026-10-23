@@ -14,19 +14,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 恋爱大师应用文档加载器
+ * 设定库文档加载器
  */
 @Component
 @Slf4j
-public class LoveAppDocumentLoader {
+public class LoreDocumentLoader {
 
     private final ResourcePatternResolver resourcePatternResolver;
 
-    LoveAppDocumentLoader(ResourcePatternResolver resourcePatternResolver){
+    LoreDocumentLoader(ResourcePatternResolver resourcePatternResolver){
         this.resourcePatternResolver = resourcePatternResolver;
     }
 
-    public List<Document> loadMarkdowns(){
+    public List<Document> loadDocuments(){
         List<Document> allDocuments = new ArrayList<>();
         try{
             // 这里可以修改为你要加载的多个 Markdown 文件的路径模式
