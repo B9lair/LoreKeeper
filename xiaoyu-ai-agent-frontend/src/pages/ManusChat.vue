@@ -15,7 +15,7 @@ import manusAvatar from '../assets/ai-manus.svg';
 
 const buildSseUrl = (message) => {
   const apiBase =
-    process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:8123/api';
+    process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:8080/api';
   const base = `${apiBase}/ai/manus/chat`;
   const params = new URLSearchParams({
     message

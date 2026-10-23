@@ -2,25 +2,20 @@ package com.xiaoyu.aiaigent.app;
 
 
 import com.xiaoyu.aiaigent.advisor.MyLoggerAdvisor;
-import com.xiaoyu.aiaigent.advisor.ReReadingAdvisor;
 import com.xiaoyu.aiaigent.chatmemory.FileBasedChatMemory;
-import com.xiaoyu.aiaigent.rag.LoveAppRagCustomAdvisorFactory;
 import com.xiaoyu.aiaigent.rag.QueryRewriter;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.QuestionAnswerAdvisor;
-import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
 import org.springframework.ai.chat.client.advisor.api.Advisor;
-import org.springframework.ai.chat.memory.InMemoryChatMemory;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.vectorstore.VectorStore;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
@@ -31,7 +26,7 @@ import static org.springframework.ai.chat.client.advisor.AbstractChatMemoryAdvis
 
 @Component
 @Slf4j
-public class LoveApp {
+public class LoreKeeper {
 
     private final ChatClient chatClient;
 
@@ -44,7 +39,7 @@ public class LoveApp {
      * 初始化 AI客户端 ChatClient
      * @param dashscopeChatModel
      */
-    public LoveApp(ChatModel dashscopeChatModel){
+    public LoreKeeper(ChatModel dashscopeChatModel){
         // 初始化基于文件的对话记忆
         String fileDir = System.getProperty("user.dir") + "/tmp/chat-memory";
         ChatMemory chatMemory = new FileBasedChatMemory(fileDir);
@@ -127,15 +122,12 @@ public class LoveApp {
     }
 
 
-    // AI恋爱知识库问答功能
-    @Resource
-    private VectorStore loveAppVectorStore;
+    // AI恋爱知识库问答功能（RAG 检索使用 pgvector 持久化向量库，步骤 1.3）
+    @Resource(name = "pgVectorVectorStore")
+    private VectorStore loreVectorStore;
 
     @Resource
     private Advisor loveAppRagCloudAdvisor;
-
-//    @Resource
-//    private VectorStore pgVectorVectorStore;
 
     @Resource
     private QueryRewriter queryRewriter;
@@ -159,15 +151,15 @@ public class LoveApp {
                 // 开启日志，便于观察效果
                 .advisors(new MyLoggerAdvisor())
                 // 应用 RAG 知识库问答
-                .advisors(new QuestionAnswerAdvisor(loveAppVectorStore))
+                .advisors(new QuestionAnswerAdvisor(loreVectorStore))
                 // 应用 RAG 检索增强服务（云知识库服务）
 //                .advisors(loveAppRagCloudAdvisor)
                 // 应用 RAG 检索增强服务（基于 PgVector 向量存储）
-//                .advisors(new QuestionAnswerAdvisor(pgVectorVectorStore))
+//                .advisors(new QuestionAnswerAdvisor(loreVectorStore))
                 // 应用自定义的 RAG 检索增强服务（文档查询器 + 上下文增强器）
 //                .advisors(
 //                        LoveAppRagCustomAdvisorFactory.createLoveAppRagCustomAdvisor(
-//                                loveAppVectorStore,"单身"
+//                                loreVectorStore,"单身"
 //                        )
 //                )
                 .call()

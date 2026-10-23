@@ -20,7 +20,7 @@ spring:
 #        stdio:
 #          servers-configuration: classpath:mcp-servers.json
 server:
-  port: 8123
+  port: 8080
   servlet:
     context-path: /api
 # springdoc-openapi ??????

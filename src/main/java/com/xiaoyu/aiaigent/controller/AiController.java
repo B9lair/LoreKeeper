@@ -1,7 +1,7 @@
 package com.xiaoyu.aiaigent.controller;
 
 import com.xiaoyu.aiaigent.agent.XiaoyuManus;
-import com.xiaoyu.aiaigent.app.LoveApp;
+import com.xiaoyu.aiaigent.app.LoreKeeper;
 import jakarta.annotation.Resource;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.ToolCallback;
@@ -20,7 +20,7 @@ import java.io.IOException;
 public class AiController {
 
     @Resource
-    private LoveApp loveApp;
+    private LoreKeeper loreKeeper;
 
     @Resource
     private ToolCallback[] allTools;
@@ -36,7 +36,7 @@ public class AiController {
      */
     @GetMapping("/love_app/chat/sync")
     public String doChatWithLoveAppSync(String message, String chatId) {
-        return loveApp.doChat(message, chatId);
+        return loreKeeper.doChat(message, chatId);
     }
 
     /**
@@ -47,7 +47,7 @@ public class AiController {
      */
     @GetMapping(value = "/love_app/chat/sse", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> doChatWithLoveAppSSE(String message, String chatId) {
-        return loveApp.doChatByStream(message, chatId);
+        return loreKeeper.doChatByStream(message, chatId);
     }
 
 
@@ -59,7 +59,7 @@ public class AiController {
      */
     @GetMapping(value = "/love_app/chat/sse")
     public Flux<ServerSentEvent<String>> doChatWithLoveAppServerSentEvent(String message, String chatId) {
-        return loveApp.doChatByStream(message, chatId)
+        return loreKeeper.doChatByStream(message, chatId)
                 .map(chunk -> ServerSentEvent.<String>builder()
                         .data(chunk)
                         .build());
@@ -77,7 +77,7 @@ public class AiController {
         // 创建一个超时时间较长的 SseEmitter
         SseEmitter emitter = new SseEmitter(180000L); // 3分钟超时
         // 获取 Flux 数据流并直接订阅
-        loveApp.doChatByStream(message, chatId)
+        loreKeeper.doChatByStream(message, chatId)
                 .subscribe(
                         // 处理每条消息
                         chunk -> {

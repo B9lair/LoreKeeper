@@ -27,7 +27,7 @@ onMounted(() => {
 
 const buildSseUrl = (message, currentChatId) => {
   const apiBase =
-    process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:8123/api';
+    process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:8080/api';
   const base = `${apiBase}/ai/love_app/chat/sse`;
   const params = new URLSearchParams({
     message,
