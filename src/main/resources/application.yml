@@ -1,0 +1,50 @@
+spring:
+  application:
+    name: ai-aigent
+  Profiles:
+    active: local
+  ai:
+    vectorstore:
+      pgvector:
+        index-type: HNSW
+        dimensions: 1536
+        distance-type: COSINE_DISTANCE
+        max-document-batch-size: 10000 # Optional: Maximum number of documents per batch
+# 临时注释掉，便于大家开发调试和部署
+#    mcp:
+#      client:
+#        sse:
+#          connections:
+#            server1:
+#              url: http://localhost:8123
+#        stdio:
+#          servers-configuration: classpath:mcp-servers.json
+server:
+  port: 8123
+  servlet:
+    context-path: /api
+# springdoc-openapi ??????
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+  group-configs:
+    - group: 'default'
+      paths-to-match: '/**'
+      packages-to-scan: com.xiaoyu.aiaigent.controller
+# knife4j???????????????
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+# 修改日志级别，查看更多细节
+logging:
+  level:
+    org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor: debug
+
+
+
+

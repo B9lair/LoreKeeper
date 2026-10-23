@@ -1,0 +1,18 @@
+# 模板文件：复制本文件为 application-local.yml，并将 ${...} 替换为真实值（或通过环境变量注入）
+spring:
+  application:
+    name: ai-aigent
+  datasource:
+    url: jdbc:postgresql://pgm-7xvmj349r98bs2giho.rwlb.cn-guangzhou.rds.aliyuncs.com:5432/LoreKeeper_DB
+    username: wxy
+    password: ${DB_PASSWORD}
+  ai:
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY}
+      chat:
+        options:
+          model: qwen-max
+
+# searchApi
+search-api:
+  api-key: ${SEARCH_API_KEY}
