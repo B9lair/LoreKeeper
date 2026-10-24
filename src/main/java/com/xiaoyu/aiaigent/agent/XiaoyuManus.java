@@ -4,12 +4,10 @@ import com.xiaoyu.aiaigent.advisor.MyLoggerAdvisor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.ToolCallback;
-import org.springframework.stereotype.Component;
 
 /**
  * 小宇的 AI 超级智能体（拥有自主规划能力，可以直接使用）
  */
-@Component
 public class XiaoyuManus extends ToolCallAgent{
 
     public XiaoyuManus(ToolCallback[] allTools, ChatModel dashscopeChatModel) {

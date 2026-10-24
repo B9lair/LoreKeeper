@@ -3,17 +3,13 @@ package com.xiaoyu.aiaigent.app;
 
 import com.xiaoyu.aiaigent.advisor.MyLoggerAdvisor;
 import com.xiaoyu.aiaigent.chatmemory.FileBasedChatMemory;
-import com.xiaoyu.aiaigent.rag.QueryRewriter;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
-import org.springframework.ai.chat.client.advisor.QuestionAnswerAdvisor;
-import org.springframework.ai.chat.client.advisor.api.Advisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Component;
@@ -121,81 +117,8 @@ public class LoreKeeper {
 
     }
 
-
-    // AI 设定库问答功能（RAG 检索使用 pgvector 持久化向量库，步骤 1.3）
     @Resource(name = "pgVectorVectorStore")
     private VectorStore loreVectorStore;
-
-    @Resource
-    private Advisor loreRagCloudAdvisor;
-
-    @Resource
-    private QueryRewriter queryRewriter;
-
-    /**
-     * 和RAG和知识库进行对话
-     * @param message
-     * @param chatId
-     * @return
-     */
-    public String doChatWithRag(String message,String chatId){
-        // 查询重写
-        String rewrittenMessage = queryRewriter.doQueryRewriter(message);
-
-        ChatResponse chatResponse = chatClient
-                .prompt()
-                // 使用改写后的查询
-                .user(rewrittenMessage)
-                .advisors(spec -> spec.param(CHAT_MEMORY_CONVERSATION_ID_KEY, chatId)
-                .param(CHAT_MEMORY_RETRIEVE_SIZE_KEY, 10))
-                // 开启日志，便于观察效果
-                .advisors(new MyLoggerAdvisor())
-                // 应用 RAG 知识库问答
-                .advisors(new QuestionAnswerAdvisor(loreVectorStore))
-                // 应用 RAG 检索增强服务（云知识库服务）
-//                .advisors(loreRagCloudAdvisor)
-                // 应用 RAG 检索增强服务（基于 PgVector 向量存储）
-//                .advisors(new QuestionAnswerAdvisor(loreVectorStore))
-                // 应用自定义的 RAG 检索增强服务（文档查询器 + 上下文增强器）
-//                .advisors(
-//                        LoreRagCustomAdvisorFactory.createLoreRagCustomAdvisor(
-//                                loreVectorStore,"单身"
-//                        )
-//                )
-                .call()
-                .chatResponse();
-
-        String content = chatResponse.getResult().getOutput().getText();
-        log.info("content:{}",content);
-        return content;
-
-    }
-
-    // AI 设定库调用工具能力
-    @Resource
-    private ToolCallback[] allTools;
-
-    /**
-     * AI 设定审查功能（支持调用工具）
-     * @param message
-     * @param chatId
-     * @return
-     */
-    public String doChatWithTools(String message, String chatId) {
-        ChatResponse response = chatClient
-                .prompt()
-                .user(message)
-                .advisors(spec -> spec.param(CHAT_MEMORY_CONVERSATION_ID_KEY, chatId)
-                        .param(CHAT_MEMORY_RETRIEVE_SIZE_KEY, 10))
-                // 开启日志，便于观察效果
-                .advisors(new MyLoggerAdvisor())
-                .tools(allTools)
-                .call()
-                .chatResponse();
-        String content = response.getResult().getOutput().getText();
-        log.info("content: {}", content);
-        return content;
-    }
 
 
 

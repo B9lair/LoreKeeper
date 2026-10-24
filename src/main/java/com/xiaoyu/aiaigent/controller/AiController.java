@@ -1,10 +1,10 @@
 package com.xiaoyu.aiaigent.controller;
 
-import com.xiaoyu.aiaigent.agent.XiaoyuManus;
+import com.xiaoyu.aiaigent.agent.IntentRouter;
+import com.xiaoyu.aiaigent.agent.LoreAgentFactory;
 import com.xiaoyu.aiaigent.app.LoreKeeper;
+import com.xiaoyu.aiaigent.common.TenantContext;
 import jakarta.annotation.Resource;
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.tool.ToolCallback;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,63 +23,32 @@ public class AiController {
     private LoreKeeper loreKeeper;
 
     @Resource
-    private ToolCallback[] allTools;
+    private IntentRouter intentRouter;
 
     @Resource
-    private ChatModel dashscopeChatModel;
+    private LoreAgentFactory loreAgentFactory;
 
-    /**
-     * 同步调用 LoreKeeper 应用
-     * @param message
-     * @param chatId
-     * @return
-     */
     @GetMapping("/lore/chat/sync")
     public String doChatWithLoreSync(String message, String chatId) {
         return loreKeeper.doChat(message, chatId);
     }
 
-    /**
-     * SSE 流式调用 LoreKeeper 应用1
-     * @param message
-     * @param chatId
-     * @return
-     */
     @GetMapping(value = "/lore/chat/sse", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> doChatWithLoreSSE(String message, String chatId) {
         return loreKeeper.doChatByStream(message, chatId);
     }
 
-
-    /**
-     * SSE 流式调用 LoreKeeper 应用2
-     * @param message
-     * @param chatId
-     * @return
-     */
     @GetMapping(value = "/lore/chat/sse")
     public Flux<ServerSentEvent<String>> doChatWithLoreServerSentEvent(String message, String chatId) {
         return loreKeeper.doChatByStream(message, chatId)
-                .map(chunk -> ServerSentEvent.<String>builder()
-                        .data(chunk)
-                        .build());
+                .map(chunk -> ServerSentEvent.<String>builder().data(chunk).build());
     }
 
-
-    /**
-     * SSE 流式调用 LoreKeeper 应用3
-     * @param message
-     * @param chatId
-     * @return
-     */
     @GetMapping("/lore/chat/sse/emitter")
     public SseEmitter doChatWithLoreSseEmitter(String message, String chatId) {
-        // 创建一个超时时间较长的 SseEmitter
-        SseEmitter emitter = new SseEmitter(180000L); // 3分钟超时
-        // 获取 Flux 数据流并直接订阅
+        SseEmitter emitter = new SseEmitter(180000L);
         loreKeeper.doChatByStream(message, chatId)
                 .subscribe(
-                        // 处理每条消息
                         chunk -> {
                             try {
                                 emitter.send(chunk);
@@ -87,25 +56,19 @@ public class AiController {
                                 emitter.completeWithError(e);
                             }
                         },
-                        // 处理错误
                         emitter::completeWithError,
-                        // 处理完成
                         emitter::complete
                 );
-        // 返回emitter
         return emitter;
     }
 
     /**
-     * 流式调用 Manus 超级智能体
-     *
-     * @param message
-     * @return
+     * 统一入口：意图路由 + 配置 Agent
      */
-    @GetMapping("/manus/chat")
-    public SseEmitter doChatWithManus(String message){
-        XiaoyuManus xiaoyuManus = new XiaoyuManus(allTools, dashscopeChatModel);
-        return xiaoyuManus.runstream(message);
+    @GetMapping("/lore/chat")
+    public SseEmitter doChatWithLore(String message) {
+        TenantContext.Tenant tenant = TenantContext.get();   // 异步前显式取（ThreadLocal 不跨线程）
+        IntentRouter.Intent intent = intentRouter.route(message);
+        return loreAgentFactory.create(intent, tenant).runstream(message);
     }
-
 }

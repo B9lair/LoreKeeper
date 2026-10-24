@@ -40,6 +40,7 @@ public class SecurityConfig {
                 .formLogin(form -> form.disable())
                 .httpBasic(basic -> basic.disable())
                 .authorizeHttpRequests(auth -> auth
+                        .shouldFilterAllDispatcherTypes(false)
                         .requestMatchers(
                                 new AntPathRequestMatcher("/auth/**"),
                                 new AntPathRequestMatcher("/health"),

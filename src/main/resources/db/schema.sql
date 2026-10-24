@@ -71,3 +71,12 @@ CREATE TABLE IF NOT EXISTS consistency_report (
     report_json JSONB,
     created_at TIMESTAMP DEFAULT now()
 );
+
+
+-- ① 关键词检索需要 pg_trgm（云 RDS 不支持则回退本地 Docker，见 B.4 第 4 条）
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX IF NOT EXISTS vector_store_content_trgm
+    ON public.vector_store USING gin (content gin_trgm_ops);
+
+-- ② 方案 B：chapter 表补整章原文列（2.4 上传章节时写入）
+ALTER TABLE chapter ADD COLUMN IF NOT EXISTS content TEXT;
