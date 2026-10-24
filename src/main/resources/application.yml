@@ -45,6 +45,12 @@ logging:
   level:
     org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor: debug
 
+# 多租户隔离 + JWT 登录（步骤 1.6）
+lorekeeper:
+  jwt:
+    secret: ${LOREKEEPER_JWT_SECRET:LoreKeeper-Dev-Secret-Key-2026}
+    expire-ms: 604800000
+
 
 
 
