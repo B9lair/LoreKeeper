@@ -9,16 +9,13 @@ spring:
         index-type: HNSW
         dimensions: 1536
         distance-type: COSINE_DISTANCE
-        max-document-batch-size: 10000 # Optional: Maximum number of documents per batch
-# 临时注释掉，便于大家开发调试和部署
-#    mcp:
-#      client:
-#        sse:
-#          connections:
-#            server1:
-#              url: http://localhost:8123
-#        stdio:
-#          servers-configuration: classpath:mcp-servers.json
+        max-document-batch-size: 10000
+    mcp:
+      client:
+        sse:
+          connections:
+            server1:
+              url: http://localhost:8124
 server:
   port: 8080
   servlet:
@@ -32,8 +29,8 @@ springdoc:
   api-docs:
     path: /v3/api-docs
   group-configs:
-    - group: 'default'
-      paths-to-match: '/**'
+    - group: "default"
+      paths-to-match: "/**"
       packages-to-scan: com.xiaoyu.aiaigent.controller
 # knife4j???????????????
 knife4j:
@@ -50,7 +47,3 @@ lorekeeper:
   jwt:
     secret: ${LOREKEEPER_JWT_SECRET:LoreKeeper-Dev-Secret-Key-2026}
     expire-ms: 604800000
-
-
-
-
