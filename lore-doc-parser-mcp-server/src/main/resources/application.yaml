@@ -1,0 +1,5 @@
+spring:
+  application:
+    name: lore-doc-parser-mcp-server
+server:
+  port: 8124
