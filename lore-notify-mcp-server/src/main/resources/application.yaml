@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: lore-notify-mcp-server
+  mail:
+    host: smtp.qq.com
+    port: 465
+    username: 2147511692@qq.com
+    password: erkbueznoqundhji
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: true
+          # 465 端口走 SSL（QQ/163 常用）；若用 587 端口，把下方 ssl 换成 starttls.enable=true
+          ssl:
+            enable: true
+server:
+  port: 8126
+
+# 与主项目/database 共用同一 JWT secret（仅解析校验，不签发）
+lorekeeper:
+  jwt:
+    secret: ${LOREKEEPER_JWT_SECRET:LoreKeeper-Dev-Secret-Key-2026}

@@ -1,5 +1,6 @@
 package com.xiaoyu.aiaigent.mcp;
 
+import com.xiaoyu.aiaigent.repository.ForeshadowRepository;
 import com.xiaoyu.aiaigent.security.JwtService;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Supplier;
 
 /**
  * 自研 MCP 客户端连接池（database 3.1 / notify 3.2）。
@@ -31,6 +33,8 @@ public class McpClientPool {
 
     private final JwtService jwtService;
 
+    private final ForeshadowRepository foreshadowRepository;
+
     private final String databaseMcpUrl;
 
     private final String notifyMcpUrl;
@@ -42,9 +46,11 @@ public class McpClientPool {
     private final Map<Long, List<McpSyncClient>> clients = new ConcurrentHashMap<>();
 
     public McpClientPool(JwtService jwtService,
+                         ForeshadowRepository foreshadowRepository,
                          @Value("${lorekeeper.mcp.database-url:http://localhost:8125}") String databaseMcpUrl,
                          @Value("${lorekeeper.mcp.notify-url:http://localhost:8126}") String notifyMcpUrl) {
         this.jwtService = jwtService;
+        this.foreshadowRepository = foreshadowRepository;
         this.databaseMcpUrl = databaseMcpUrl;
         this.notifyMcpUrl = notifyMcpUrl;
     }
@@ -52,13 +58,17 @@ public class McpClientPool {
     /** 获取某 tenant 专属的 query_database 工具（3.1） */
     public ToolCallback queryDatabaseTool(long userId, long workId) {
         return tool(userId, workId, databaseMcpUrl, "query_database",
-                Map.<String, Object>of("workId", workId));
+                Map.<String, Object>of("workId", workId), null);
     }
 
-    /** 获取某 tenant 专属的 send_email 工具，收件人由服务端注入（3.2） */
+    /** 获取某 tenant 专属的 send_email 工具：收件人静态注入，正文动态注入（真实伏笔清单，3.2） */
     public ToolCallback sendEmailTool(long userId, long workId, String email) {
+        // 静态注入 to；动态注入 subject/body（查真实 open 伏笔拼正文，从 LLM 手中收回，杜绝编造）
+        Supplier<Map<String, Object>> dynamicArgs = () -> Map.of(
+                "subject", "连载更新提醒",
+                "body", buildForeshadowReminderBody(workId));
         return tool(userId, workId, notifyMcpUrl, "send_email",
-                Map.<String, Object>of("to", email));
+                Map.<String, Object>of("to", email), dynamicArgs);
     }
 
     /**
@@ -66,7 +76,7 @@ public class McpClientPool {
      * （降级：本次 Agent 不含该工具），不阻断其他功能。
      */
     private ToolCallback tool(long userId, long workId, String baseUrl, String toolName,
-                              Map<String, Object> injectedArgs) {
+                              Map<String, Object> injectedArgs, Supplier<Map<String, Object>> dynamicArgs) {
         Map<String, ToolCallback> byTool = toolCache.get(workId);
         if (byTool != null && byTool.containsKey(toolName)) {
             return byTool.get(toolName);
@@ -86,7 +96,7 @@ public class McpClientPool {
                     return null;
                 }
                 clients.computeIfAbsent(workId, k -> new CopyOnWriteArrayList<>()).add(client);
-                ToolCallback callback = new BoundedMcpToolCallback(client, tool, injectedArgs);
+                ToolCallback callback = new BoundedMcpToolCallback(client, tool, injectedArgs, dynamicArgs);
                 toolCache.computeIfAbsent(workId, k -> new ConcurrentHashMap<>()).put(toolName, callback);
                 return callback;
             }
@@ -113,6 +123,20 @@ public class McpClientPool {
             .filter(t -> toolName.equals(t.name()))
             .findFirst()
             .orElse(null);
+    }
+
+    /** 拼装伏笔提醒正文：用代码查真实 open 伏笔生成，不从 LLM 转述（事实性内容交给代码） */
+    private String buildForeshadowReminderBody(long workId) {
+        List<String> contents = foreshadowRepository.findOpenContentsByWorkId(workId);
+        if (contents.isEmpty()) {
+            return "您当前没有未回收的伏笔。";
+        }
+        StringBuilder sb = new StringBuilder("您有以下伏笔待回收：\n\n");
+        for (int i = 0; i < contents.size(); i++) {
+            sb.append(i + 1).append(". ").append(contents.get(i)).append("\n");
+        }
+        sb.append("\n请尽快处理。");
+        return sb.toString();
     }
 
     @PreDestroy

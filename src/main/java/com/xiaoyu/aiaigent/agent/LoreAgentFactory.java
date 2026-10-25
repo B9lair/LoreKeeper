@@ -117,7 +117,12 @@ public class LoreAgentFactory {
         流程：① 调 settingSearch 语义检索 ② 需精确字段（如伏笔状态）时调 queryDatabase ③ 综合回答并注明出处。""";
 
     static final String FORESHADOW_SOP = """
-        你是「伏笔追踪」工作流。流程：① 调 queryDatabase 查未回收伏笔 ② 汇总状态 ③ 需要时调 sendEmail 提醒。""";
+        你是「伏笔追踪」工作流，负责查询未回收伏笔并邮件提醒作者。
+        必须按顺序执行，不可跳过、不可在发邮件前提前结束：
+        ① 调 queryDatabase 查询未回收伏笔（table=foreshadow，conditions=status=open）；
+        ② 汇总未回收伏笔清单；
+        ③ 调 sendEmail 发送邮件提醒（收件人、主题、正文均由系统自动生成，无需填写）；
+        ④ 完成上述三步后，再调 doTerminate 结束。""";
 
     static final String CHAT_SOP = """
         你是 LoreKeeper，面向网文作者的创作设定管家，回答创作相关问题。""";
