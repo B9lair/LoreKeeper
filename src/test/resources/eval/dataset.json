@@ -1,0 +1,62 @@
+{
+  "seed": {
+    "settings": [
+      { "id": "9001", "type": "setting", "chapterNo": 3, "text": "青阳城靠灵石阵供暖，四季如春" },
+      { "id": "9002", "type": "setting", "chapterNo": 1, "text": "女二柳如烟是青阳城第一剑修，首次在青阳城登场" },
+      { "id": "9003", "type": "setting", "chapterNo": 3, "text": "主角林玄天生左撇子，惯用左手持剑" },
+      { "id": "9004", "type": "setting", "chapterNo": 5, "text": "青阳城护城大阵由九枚灵石驱动" },
+      { "id": "9005", "type": "setting", "chapterNo": 6, "text": "主角林玄的师父是青阳城前任城主" },
+      { "id": "9006", "type": "setting", "chapterNo": 7, "text": "女二柳如烟的佩剑名为青霜，能斩断灵石" },
+      { "id": "9007", "type": "setting", "chapterNo": 8, "text": "主角林玄出身青阳城林家旁支" },
+      { "id": "9008", "type": "setting", "chapterNo": 9, "text": "青阳城城主闭关十年未出关" }
+    ],
+    "characters": [
+      { "name": "主角", "aliases": ["林玄"] },
+      { "name": "女二", "aliases": ["柳如烟"] }
+    ]
+  },
+  "rag": [
+    { "query": "女二在青阳城的身份是什么", "expectedIds": ["9002"] },
+    { "query": "主角惯用哪只手拿剑", "expectedIds": ["9003"] },
+    { "query": "青阳城为什么四季如春", "expectedIds": ["9001"] },
+    { "query": "主角的师父是谁", "expectedIds": ["9005"] },
+    { "query": "女二的佩剑叫什么名字", "expectedIds": ["9006"] },
+    { "query": "主角的出身是什么", "expectedIds": ["9007"] },
+    { "query": "青阳城的护城大阵由什么驱动", "expectedIds": ["9004"] },
+    { "query": "青阳城城主最近在做什么", "expectedIds": ["9008"] }
+  ],
+  "consistency": [
+    { "entity": "主角", "attribute": "惯用手", "valueA": "左撇子", "valueB": "右手", "isConflict": true },
+    { "entity": "青阳城", "attribute": "供暖方式", "valueA": "灵石阵", "valueB": "地火", "isConflict": true },
+    { "entity": "女二", "attribute": "身份", "valueA": "剑修", "valueB": "药师", "isConflict": true },
+    { "entity": "青阳城", "attribute": "护城大阵", "valueA": "九枚灵石", "valueB": "五枚灵石", "isConflict": true },
+    { "entity": "主角", "attribute": "出身", "valueA": "青阳城", "valueB": "云州", "isConflict": true },
+    { "entity": "主角", "attribute": "惯用手", "valueA": "左撇子", "valueB": "左撇子", "isConflict": false },
+    { "entity": "青阳城", "attribute": "供暖方式", "valueA": "灵石阵", "valueB": "灵石阵", "isConflict": false },
+    { "entity": "女二", "attribute": "身份", "valueA": "剑修", "valueB": "剑修", "isConflict": false },
+    { "entity": "主角", "attribute": "惯用手", "valueA": "左撇子", "valueB": "惯用左手", "isConflict": false },
+    { "entity": "主角", "attribute": "出身", "valueA": "青阳城", "valueB": "青阳城人", "isConflict": false }
+  ],
+  "extraction": [
+    {
+      "text": "主角林玄是青阳城人，天生左撇子。她总觉得这事没那么简单。",
+      "expectedEntities": ["主角", "青阳城"],
+      "expectedForeshadowCount": 1
+    },
+    {
+      "text": "青阳城靠灵石阵供暖，四季如春。女二柳如烟是青阳城第一剑修。",
+      "expectedEntities": ["青阳城", "女二"],
+      "expectedForeshadowCount": 0
+    },
+    {
+      "text": "主角的师父是青阳城前任城主。女二的佩剑青霜能斩断灵石。",
+      "expectedEntities": ["主角", "青阳城", "女二"],
+      "expectedForeshadowCount": 0
+    },
+    {
+      "text": "青阳城城主闭关十年未出关。林家旁支的林玄天赋异禀。",
+      "expectedEntities": ["青阳城", "主角"],
+      "expectedForeshadowCount": 0
+    }
+  ]
+}
