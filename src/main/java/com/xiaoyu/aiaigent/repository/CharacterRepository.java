@@ -4,12 +4,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
-import java.sql.PreparedStatement;
-import java.sql.Statement;
 import java.util.List;
 import java.util.Optional;
 
@@ -60,27 +56,13 @@ public class CharacterRepository {
 
     /** 新增，返回带自增 id 的实体 */
     public Character save(Character character) {
-        KeyHolder keyHolder = new GeneratedKeyHolder();
-        jdbcTemplate.update(connection -> {
-            PreparedStatement ps = connection.prepareStatement(
-                    "INSERT INTO character (work_id, name, aliases, role, ability, first_appear_chapter, status) " +
-                            "VALUES (?, ?, ?::jsonb, ?, ?, ?, ?)",
-                    Statement.RETURN_GENERATED_KEYS);
-            ps.setObject(1, character.workId());
-            ps.setString(2, character.name());
-            ps.setString(3, toJson(character.aliases()));
-            ps.setString(4, character.role());
-            ps.setString(5, character.ability());
-            ps.setObject(6, character.firstAppearChapter());
-            ps.setString(7, character.status());
-            return ps;
-        }, keyHolder);
-
-        Number key = keyHolder.getKey();
-        if (key == null) {
-            throw new IllegalStateException("插入 character 后未返回自增主键");
-        }
-        return findById(key.longValue()).orElseThrow();
+        Long id = jdbcTemplate.queryForObject(
+                "INSERT INTO character (work_id, name, aliases, role, ability, first_appear_chapter, status) " +
+                "VALUES (?, ?, ?::jsonb, ?, ?, ?, ?) RETURNING id",
+                Long.class,
+                character.workId(), character.name(), toJson(character.aliases()),
+                character.role(), character.ability(), character.firstAppearChapter(), character.status());
+        return findById(id).orElseThrow();
     }
 
     public Optional<Character> findById(Long id) {
@@ -100,6 +82,16 @@ public class CharacterRepository {
                 "SELECT * FROM character WHERE work_id = ? AND name = ?", ROW_MAPPER, workId, name);
         return list.stream().findFirst();
     }
+
+        /** 按作品 + 姓名/别名查找（归并用：实体名 + aliases） */
+    public Optional<Character> findByNameOrAlias(Long workId, String name) {
+        List<Character> list = jdbcTemplate.query(
+                "SELECT * FROM character WHERE work_id = ? AND (name = ? OR EXISTS " +
+                "(SELECT 1 FROM jsonb_array_elements_text(aliases) a WHERE a = ?))",
+                ROW_MAPPER, workId, name, name);
+        return list.stream().findFirst();
+    }
+
 
     /** 更新（按 id + work_id 定位，防跨作品误改），返回受影响行数 */
     public int update(Character character) {

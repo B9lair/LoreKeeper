@@ -15,8 +15,6 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
-import java.util.List;
-
 import static org.springframework.ai.chat.client.advisor.AbstractChatMemoryAdvisor.CHAT_MEMORY_CONVERSATION_ID_KEY;
 import static org.springframework.ai.chat.client.advisor.AbstractChatMemoryAdvisor.CHAT_MEMORY_RETRIEVE_SIZE_KEY;
 
@@ -92,35 +90,8 @@ public class LoreKeeper {
 
     }
 
-    record ConsistencyReport(String title, List<String> suggestions){
-
-    }
-
-    /**
-     * AI 设定一致性审查功能（结构化输出，步骤 2.4 改造为 reviewChapter）
-     * @param message
-     * @param chatId
-     * @return
-     */
-    public ConsistencyReport doChatWithReport(String message, String chatId){
-        ConsistencyReport consistencyReport = chatClient
-                .prompt()
-                .system(SYSTEM_PROMPT + "每次对话后都要生成设定审查结果，标题为{用户名}的设定报告，内容为建议列表")
-                .user(message)
-                .advisors(spec -> spec.param(CHAT_MEMORY_CONVERSATION_ID_KEY, chatId)
-                        .param(CHAT_MEMORY_RETRIEVE_SIZE_KEY, 10))
-                .call()
-                .entity(ConsistencyReport.class);
-
-        log.info("consistencyReport:{}",consistencyReport);
-        return consistencyReport;
-
-    }
-
     @Resource(name = "pgVectorVectorStore")
     private VectorStore loreVectorStore;
-
-
 
     // AI 调用 MCP 服务
     @Resource

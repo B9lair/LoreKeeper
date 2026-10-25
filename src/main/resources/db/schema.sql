@@ -80,3 +80,24 @@ CREATE INDEX IF NOT EXISTS vector_store_content_trgm
 
 -- ② 方案 B：chapter 表补整章原文列（2.4 上传章节时写入）
 ALTER TABLE chapter ADD COLUMN IF NOT EXISTS content TEXT;
+
+-- ==================== 步骤 2.4 数据库变更（方案 A）====================
+-- 目标库：LoreKeeper_DB（云 RDS PostgreSQL）
+-- 幂等脚本，可重复执行
+
+-- ① world_setting 加四列，承载 NewSetting(entity/attribute/value/evidence) 四元组与证据锚定
+ALTER TABLE public.world_setting
+    ADD COLUMN IF NOT EXISTS entity VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS attribute VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS value TEXT,
+    ADD COLUMN IF NOT EXISTS evidence TEXT;
+
+-- ② 归并/比对高频按 (work_id, entity) 查，加索引
+CREATE INDEX IF NOT EXISTS idx_world_setting_work_entity
+    ON public.world_setting (work_id, entity);
+
+-- ③ 验证：确认新列已加上
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'world_setting'
+ORDER BY ordinal_position;

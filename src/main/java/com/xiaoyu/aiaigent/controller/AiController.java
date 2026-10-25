@@ -12,6 +12,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.publisher.Flux;
+import com.xiaoyu.aiaigent.lore.ConsistencyReport;
+import com.xiaoyu.aiaigent.lore.ConsistencyReviewService;
+import com.xiaoyu.aiaigent.lore.ReviewRequest;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 
 import java.io.IOException;
 
@@ -27,6 +32,10 @@ public class AiController {
 
     @Resource
     private LoreAgentFactory loreAgentFactory;
+
+    @Resource
+    private ConsistencyReviewService consistencyReviewService;
+
 
     @GetMapping("/lore/chat/sync")
     public String doChatWithLoreSync(String message, String chatId) {
@@ -71,4 +80,15 @@ public class AiController {
         IntentRouter.Intent intent = intentRouter.route(message);
         return loreAgentFactory.create(intent, tenant).runstream(message);
     }
+
+    /**
+     * 一致性审查
+     * workId 从登录态取，不信任请求参数。
+     */
+    @PostMapping("/lore/review")
+    public ConsistencyReport reviewChapter(@RequestBody ReviewRequest req) {
+        long workId = TenantContext.get().workId();
+        return consistencyReviewService.reviewChapter(workId, req.chapterNo(), req.chapterText());
+    }
+
 }
