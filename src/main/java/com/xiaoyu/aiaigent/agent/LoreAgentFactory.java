@@ -2,6 +2,7 @@ package com.xiaoyu.aiaigent.agent;
 
 import com.xiaoyu.aiaigent.advisor.MyLoggerAdvisor;
 import com.xiaoyu.aiaigent.common.TenantContext;
+import com.xiaoyu.aiaigent.mcp.McpClientPool;
 import com.xiaoyu.aiaigent.rag.HybridSearchService;
 import com.xiaoyu.aiaigent.tools.SettingSearchTool;
 import org.springframework.ai.chat.client.ChatClient;
@@ -9,6 +10,10 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbacks;
 import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * 配置 Agent 工厂
@@ -20,22 +25,23 @@ public class LoreAgentFactory {
 
     private final HybridSearchService hybridSearchService;
 
+    private final McpClientPool mcpClientPool;
+
     private final ToolCallback[] writeTools;
-
     private final ToolCallback[] reviewTools;
-
     private final ToolCallback[] queryTools;
-
     private final ToolCallback[] foreshadowTools;
 
     public LoreAgentFactory(ChatModel dashscopeChatModel,
                             HybridSearchService hybridSearchService,
+                            McpClientPool mcpClientPool,
                             ToolCallback[] writeTools,
                             ToolCallback[] reviewTools,
                             ToolCallback[] queryTools,
                             ToolCallback[] foreshadowTools) {
         this.chatModel = dashscopeChatModel;
         this.hybridSearchService = hybridSearchService;
+        this.mcpClientPool = mcpClientPool;
         this.writeTools = writeTools;
         this.reviewTools = reviewTools;
         this.queryTools = queryTools;
@@ -47,13 +53,15 @@ public class LoreAgentFactory {
         // workId 在此绑定进检索工具，模型只传 query，服务端注入 workId（2.7 隔离）
         ToolCallback settingSearch =
                 ToolCallbacks.from(new SettingSearchTool(hybridSearchService, workId))[0];
+        // database MCP：每 workId 一条带 JWT 的连接（连接级鉴权），从池取 query_database（3.1）
+        ToolCallback queryDatabase = mcpClientPool.queryDatabaseTool(tenant.userId(), workId);
 
         return switch (intent) {
-            case WRITE       -> newAgent("设定提示", WRITE_SOP, merge(settingSearch, writeTools));
-            case REVIEW      -> newAgent("一致性审查", REVIEW_SOP, merge(settingSearch, reviewTools));
-            case QUERY       -> newAgent("世界观问答", QUERY_SOP, merge(settingSearch, queryTools));
-            case FORESHADOW  -> newAgent("伏笔追踪", FORESHADOW_SOP, merge(settingSearch, foreshadowTools));
-            default          -> newAgent("通用", CHAT_SOP, merge(settingSearch, queryTools));
+            case WRITE       -> newAgent("设定提示", WRITE_SOP, merge(settingSearch, null, writeTools));
+            case REVIEW      -> newAgent("一致性审查", REVIEW_SOP, merge(settingSearch, null, reviewTools));
+            case QUERY       -> newAgent("世界观问答", QUERY_SOP, merge(settingSearch, queryDatabase, queryTools));
+            case FORESHADOW  -> newAgent("伏笔追踪", FORESHADOW_SOP, merge(settingSearch, queryDatabase, foreshadowTools));
+            default          -> newAgent("通用", CHAT_SOP, merge(settingSearch, queryDatabase, queryTools));
         };
     }
 
@@ -69,12 +77,15 @@ public class LoreAgentFactory {
         return agent;
     }
 
-    /** settingSearch（动态绑定 workId）放最前，静态工具子集拼后面 */
-    private static ToolCallback[] merge(ToolCallback first, ToolCallback[] rest) {
-        ToolCallback[] all = new ToolCallback[rest.length + 1];
-        all[0] = first;
-        System.arraycopy(rest, 0, all, 1, rest.length);
-        return all;
+    /** settingSearch 放最前；mcpTool 可能为 null（MCP 未连接/降级），merge 时跳过 */
+    private static ToolCallback[] merge(ToolCallback first, ToolCallback mcpTool, ToolCallback[] rest) {
+        List<ToolCallback> list = new ArrayList<>();
+        list.add(first);
+        if (mcpTool != null) {
+            list.add(mcpTool);
+        }
+        list.addAll(Arrays.asList(rest));
+        return list.toArray(new ToolCallback[0]);
     }
 
     static final String WRITE_SOP = """

@@ -32,7 +32,7 @@ springdoc:
     - group: "default"
       paths-to-match: "/**"
       packages-to-scan: com.xiaoyu.aiaigent.controller
-# knife4j???????????????
+# knife4j
 knife4j:
   enable: true
   setting:
@@ -47,6 +47,8 @@ lorekeeper:
   jwt:
     secret: ${LOREKEEPER_JWT_SECRET:LoreKeeper-Dev-Secret-Key-2026}
     expire-ms: 604800000
+  mcp:
+    database-url: http://localhost:8125
 
 rag:
   rerank:
