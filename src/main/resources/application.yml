@@ -49,6 +49,7 @@ lorekeeper:
     expire-ms: 604800000
   mcp:
     database-url: http://localhost:8125
+    notify-url: http://localhost:8126
 
 rag:
   rerank:

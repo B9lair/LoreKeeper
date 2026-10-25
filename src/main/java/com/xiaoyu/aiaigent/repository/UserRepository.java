@@ -34,6 +34,13 @@ public class UserRepository {
         return list.stream().findFirst();
     }
 
+    /** 按主键查用户（3.2 发邮件时按 userId 取收件邮箱） */
+    public Optional<User> findById(long id) {
+        List<User> list = jdbcTemplate.query(
+                "SELECT id, email, password_hash FROM users WHERE id = ?", ROW_MAPPER, id);
+        return list.stream().findFirst();
+    }
+
     /** 新增用户，返回自增 id（PostgreSQL RETURNING） */
     public long save(String email, String passwordHash) {
         return jdbcTemplate.queryForObject(

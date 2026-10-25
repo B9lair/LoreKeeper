@@ -3,6 +3,7 @@ package com.xiaoyu.aiaigent.agent;
 import com.xiaoyu.aiaigent.advisor.MyLoggerAdvisor;
 import com.xiaoyu.aiaigent.common.TenantContext;
 import com.xiaoyu.aiaigent.mcp.McpClientPool;
+import com.xiaoyu.aiaigent.repository.UserRepository;
 import com.xiaoyu.aiaigent.rag.HybridSearchService;
 import com.xiaoyu.aiaigent.tools.SettingSearchTool;
 import org.springframework.ai.chat.client.ChatClient;
@@ -27,6 +28,8 @@ public class LoreAgentFactory {
 
     private final McpClientPool mcpClientPool;
 
+    private final UserRepository userRepository;
+
     private final ToolCallback[] writeTools;
     private final ToolCallback[] reviewTools;
     private final ToolCallback[] queryTools;
@@ -35,6 +38,7 @@ public class LoreAgentFactory {
     public LoreAgentFactory(ChatModel dashscopeChatModel,
                             HybridSearchService hybridSearchService,
                             McpClientPool mcpClientPool,
+                            UserRepository userRepository,
                             ToolCallback[] writeTools,
                             ToolCallback[] reviewTools,
                             ToolCallback[] queryTools,
@@ -42,6 +46,7 @@ public class LoreAgentFactory {
         this.chatModel = dashscopeChatModel;
         this.hybridSearchService = hybridSearchService;
         this.mcpClientPool = mcpClientPool;
+        this.userRepository = userRepository;
         this.writeTools = writeTools;
         this.reviewTools = reviewTools;
         this.queryTools = queryTools;
@@ -55,13 +60,20 @@ public class LoreAgentFactory {
                 ToolCallbacks.from(new SettingSearchTool(hybridSearchService, workId))[0];
         // database MCP：每 workId 一条带 JWT 的连接（连接级鉴权），从池取 query_database（3.1）
         ToolCallback queryDatabase = mcpClientPool.queryDatabaseTool(tenant.userId(), workId);
+        // notify MCP（3.2）：收件人 = 当前登录用户邮箱，服务端从 userId 查，模型不可填
+        String email = userRepository.findById(tenant.userId())
+                .map(UserRepository.User::email)
+                .orElse(null);
+        ToolCallback sendEmail = email == null
+                ? null
+                : mcpClientPool.sendEmailTool(tenant.userId(), workId, email);
 
         return switch (intent) {
-            case WRITE       -> newAgent("设定提示", WRITE_SOP, merge(settingSearch, null, writeTools));
-            case REVIEW      -> newAgent("一致性审查", REVIEW_SOP, merge(settingSearch, null, reviewTools));
-            case QUERY       -> newAgent("世界观问答", QUERY_SOP, merge(settingSearch, queryDatabase, queryTools));
-            case FORESHADOW  -> newAgent("伏笔追踪", FORESHADOW_SOP, merge(settingSearch, queryDatabase, foreshadowTools));
-            default          -> newAgent("通用", CHAT_SOP, merge(settingSearch, queryDatabase, queryTools));
+            case WRITE       -> newAgent("设定提示", WRITE_SOP, merge(settingSearch, writeTools));
+            case REVIEW      -> newAgent("一致性审查", REVIEW_SOP, merge(settingSearch, reviewTools));
+            case QUERY       -> newAgent("世界观问答", QUERY_SOP, merge(settingSearch, queryTools, queryDatabase));
+            case FORESHADOW  -> newAgent("伏笔追踪", FORESHADOW_SOP, merge(settingSearch, foreshadowTools, queryDatabase, sendEmail));
+            default          -> newAgent("通用", CHAT_SOP, merge(settingSearch, queryTools, queryDatabase, sendEmail));
         };
     }
 
@@ -77,12 +89,14 @@ public class LoreAgentFactory {
         return agent;
     }
 
-    /** settingSearch 放最前；mcpTool 可能为 null（MCP 未连接/降级），merge 时跳过 */
-    private static ToolCallback[] merge(ToolCallback first, ToolCallback mcpTool, ToolCallback[] rest) {
+    /** settingSearch 放最前；mcpTools 可能含 null（MCP 未连接/降级），merge 时跳过 */
+    private static ToolCallback[] merge(ToolCallback first, ToolCallback[] rest, ToolCallback... mcpTools) {
         List<ToolCallback> list = new ArrayList<>();
         list.add(first);
-        if (mcpTool != null) {
-            list.add(mcpTool);
+        for (ToolCallback mcpTool : mcpTools) {
+            if (mcpTool != null) {
+                list.add(mcpTool);
+            }
         }
         list.addAll(Arrays.asList(rest));
         return list.toArray(new ToolCallback[0]);
