@@ -27,19 +27,6 @@
 
     <!-- 中栏：对话主区 -->
     <section class="chat-main">
-      <div class="intent-chips">
-        <button
-          v-for="c in intents"
-          :key="c.key"
-          type="button"
-          class="intent-chip"
-          @click="fill(c)"
-        >
-          <span class="ic-icon" aria-hidden="true">{{ c.icon }}</span>
-          {{ c.label }}
-        </button>
-      </div>
-
       <div ref="scrollEl" class="chat-window">
         <div v-if="messages.length === 0" class="empty">
           写新章节前输入一段剧情，LoreKeeper 会路由意图、检索设定并生成提示卡。
@@ -141,13 +128,6 @@ import { listConversations, getConversation, deleteConversation } from '../api/c
 import { intentLabel, intentCls } from '../utils/intent';
 import { workStore } from '../stores/work';
 
-const intents = [
-  { key: 'WRITE', label: '写新章节', icon: '✍', hint: '写新章节：主角在青阳城第一次遇到女二…' },
-  { key: 'REVIEW', label: '审查', icon: '⚑', hint: '审查这一章：' },
-  { key: 'QUERY', label: '查设定', icon: '?', hint: '查一下：主角的师傅是谁、第几章出场？' },
-  { key: 'FORESHADOW', label: '伏笔', icon: '◉', hint: '追踪伏笔：当前有哪些未回收？' }
-];
-
 const messages = ref([]);
 const input = ref('');
 const loading = ref(false);
@@ -193,10 +173,6 @@ function toolIcon(t) {
 const scrollToBottom = async () => {
   await nextTick();
   if (scrollEl.value) scrollEl.value.scrollTop = scrollEl.value.scrollHeight;
-};
-
-const fill = (c) => {
-  input.value = c.hint;
 };
 
 // 记住当前会话 ID 的 localStorage key（用于刷新后恢复）
@@ -481,38 +457,6 @@ onBeforeUnmount(() => {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-}
-
-.intent-chips {
-  display: flex;
-  gap: 6px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  flex-wrap: wrap;
-}
-
-.intent-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border-strong);
-  background: var(--bg-inset);
-  color: var(--text-muted);
-  font-size: 12.5px;
-  cursor: pointer;
-  transition: color 0.12s ease, border-color 0.12s ease;
-}
-
-.intent-chip:hover {
-  color: var(--text);
-  border-color: var(--accent);
-}
-
-.ic-icon {
-  font-size: 13px;
 }
 
 .chat-window {

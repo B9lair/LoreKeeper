@@ -36,6 +36,37 @@
             <pre v-if="queryResult" class="out">{{ queryResult }}</pre>
             <div v-if="queryError" class="error-box">{{ queryError }}</div>
           </div>
+
+          <div class="test-block">
+            <div class="block-title mono">split_chapters</div>
+            <div class="block-row">
+              <input v-model="splitText" class="input" placeholder="粘贴全文，按「第X章/Chapter X」切分" />
+              <button type="button" class="btn primary sm" :disabled="splitLoading" @click="runSplit">切分</button>
+            </div>
+            <pre v-if="splitResult" class="out">{{ splitResult }}</pre>
+            <div v-if="splitError" class="error-box">{{ splitError }}</div>
+          </div>
+
+          <div class="test-block">
+            <div class="block-title mono">parse_document_content</div>
+            <div class="block-row">
+              <input v-model="contentFileName" class="input" placeholder="文件名，如 chapter.txt" />
+              <input v-model="contentB64" class="input" placeholder="base64 内容" />
+              <button type="button" class="btn primary sm" :disabled="contentLoading" @click="runParseContent">解析</button>
+            </div>
+            <pre v-if="contentResult" class="out">{{ contentResult }}</pre>
+            <div v-if="contentError" class="error-box">{{ contentError }}</div>
+          </div>
+
+          <div class="test-block">
+            <div class="block-title mono">detect_encoding</div>
+            <div class="block-row">
+              <input v-model="encodingB64" class="input" placeholder="base64 内容" />
+              <button type="button" class="btn primary sm" :disabled="encodingLoading" @click="runEncoding">探测</button>
+            </div>
+            <pre v-if="encodingResult" class="out">{{ encodingResult }}</pre>
+            <div v-if="encodingError" class="error-box">{{ encodingError }}</div>
+          </div>
         </div>
       </section>
 
@@ -91,7 +122,7 @@
 
 <script setup>
 import { onMounted, ref, watch } from 'vue';
-import { debugIntent, mcpStatus, mcpParse, mcpQuery } from '../api/debug';
+import { debugIntent, mcpStatus, mcpParse, mcpQuery, mcpSplit, mcpEncoding, mcpParseContent } from '../api/debug';
 import { searchRag } from '../api/rag';
 import { intentLabel, intentCls } from '../utils/intent';
 import { workStore } from '../stores/work';
@@ -110,6 +141,19 @@ const queryConditions = ref('');
 const queryResult = ref('');
 const queryError = ref('');
 const queryLoading = ref(false);
+const splitText = ref('');
+const splitResult = ref('');
+const splitError = ref('');
+const splitLoading = ref(false);
+const contentFileName = ref('');
+const contentB64 = ref('');
+const contentResult = ref('');
+const contentError = ref('');
+const contentLoading = ref(false);
+const encodingB64 = ref('');
+const encodingResult = ref('');
+const encodingError = ref('');
+const encodingLoading = ref(false);
 
 // RAG
 const ragQuery = ref('');
@@ -156,6 +200,51 @@ const runQuery = async () => {
     queryError.value = '查询失败：' + (e.message || '未知错误');
   } finally {
     queryLoading.value = false;
+  }
+};
+
+const runSplit = async () => {
+  if (!splitText.value.trim()) return;
+  splitLoading.value = true;
+  splitResult.value = '';
+  splitError.value = '';
+  try {
+    const r = await mcpSplit(splitText.value.trim());
+    splitResult.value = JSON.stringify(r.chapters, null, 2) || '';
+  } catch (e) {
+    splitError.value = '切分失败：' + (e.message || '未知错误');
+  } finally {
+    splitLoading.value = false;
+  }
+};
+
+const runParseContent = async () => {
+  if (!contentB64.value.trim()) return;
+  contentLoading.value = true;
+  contentResult.value = '';
+  contentError.value = '';
+  try {
+    const r = await mcpParseContent(contentFileName.value.trim(), contentB64.value.trim());
+    contentResult.value = r.result || r.error || '';
+  } catch (e) {
+    contentError.value = '解析失败：' + (e.message || '未知错误');
+  } finally {
+    contentLoading.value = false;
+  }
+};
+
+const runEncoding = async () => {
+  if (!encodingB64.value.trim()) return;
+  encodingLoading.value = true;
+  encodingResult.value = '';
+  encodingError.value = '';
+  try {
+    const r = await mcpEncoding(encodingB64.value.trim());
+    encodingResult.value = r.encoding || r.error || '';
+  } catch (e) {
+    encodingError.value = '探测失败：' + (e.message || '未知错误');
+  } finally {
+    encodingLoading.value = false;
   }
 };
 

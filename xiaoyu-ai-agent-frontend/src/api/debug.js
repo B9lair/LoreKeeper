@@ -19,3 +19,18 @@ export function mcpParse(filePath) {
 export function mcpQuery(table, fields, conditions) {
   return http.post('/debug/mcp/query', { table, fields, conditions }).then(({ data }) => data);
 }
+
+// 真调 split_chapters（整本切章）
+export function mcpSplit(text) {
+  return http.post('/debug/mcp/split', { text }).then(({ data }) => data);
+}
+
+// 真调 detect_encoding（编码探测）
+export function mcpEncoding(base64Content) {
+  return http.post('/debug/mcp/encoding', { base64Content }).then(({ data }) => data);
+}
+
+// 真调 parse_document_content（内容解析）
+export function mcpParseContent(fileName, base64Content) {
+  return http.post('/debug/mcp/parse-content', { fileName, base64Content }).then(({ data }) => data);
+}

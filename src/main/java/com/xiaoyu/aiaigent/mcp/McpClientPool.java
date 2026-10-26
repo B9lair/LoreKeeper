@@ -1,5 +1,9 @@
 package com.xiaoyu.aiaigent.mcp;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xiaoyu.aiaigent.repository.ForeshadowRepository;
 import com.xiaoyu.aiaigent.security.JwtService;
 import io.modelcontextprotocol.client.McpClient;
@@ -8,11 +12,13 @@ import io.modelcontextprotocol.spec.McpSchema.Tool;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.model.ModelOptionsUtils;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -41,6 +47,8 @@ public class McpClientPool {
 
     private final String docParserMcpUrl;
 
+    private final ObjectMapper objectMapper;
+
     /** key = workId，value = (工具名 -> 该 workId 专属 ToolCallback) */
     private final Map<Long, Map<String, ToolCallback>> toolCache = new ConcurrentHashMap<>();
 
@@ -49,11 +57,13 @@ public class McpClientPool {
 
     public McpClientPool(JwtService jwtService,
                          ForeshadowRepository foreshadowRepository,
+                         ObjectMapper objectMapper,
                          @Value("${lorekeeper.mcp.database-url:http://localhost:8125}") String databaseMcpUrl,
                          @Value("${lorekeeper.mcp.notify-url:http://localhost:8126}") String notifyMcpUrl,
                          @Value("${lorekeeper.mcp.doc-parser-url:http://localhost:8124}") String docParserMcpUrl) {
         this.jwtService = jwtService;
         this.foreshadowRepository = foreshadowRepository;
+        this.objectMapper = objectMapper;
         this.databaseMcpUrl = databaseMcpUrl;
         this.notifyMcpUrl = notifyMcpUrl;
         this.docParserMcpUrl = docParserMcpUrl;
@@ -78,6 +88,86 @@ public class McpClientPool {
     /** 获取某 tenant 专属的 parse_document 工具（doc-parser 2.1，解析 TXT/MD/PDF/Word 为纯文本） */
     public ToolCallback parseDocumentTool(long userId, long workId) {
         return tool(userId, workId, docParserMcpUrl, "parse_document", null, null);
+    }
+
+    /** 获取 split_chapters 工具（doc-parser，纯文本切章，无租户键） */
+    public ToolCallback splitChaptersTool(long userId, long workId) {
+        return tool(userId, workId, docParserMcpUrl, "split_chapters", null, null);
+    }
+
+    /** 获取 parse_document_content 工具（doc-parser，base64 内容解析，无租户键） */
+    public ToolCallback parseDocumentContentTool(long userId, long workId) {
+        return tool(userId, workId, docParserMcpUrl, "parse_document_content", null, null);
+    }
+
+    /** 获取 detect_encoding 工具（doc-parser，编码探测，无租户键） */
+    public ToolCallback detectEncodingTool(long userId, long workId) {
+        return tool(userId, workId, docParserMcpUrl, "detect_encoding", null, null);
+    }
+
+    /**
+     * 确定性切章：调 split_chapters 并解析返回的 JSON 数组 [{title, content}]。
+     * 8124 不在线或解析失败时降级为「整本一章」（核心链路不强依赖 MCP）。
+     */
+    public List<SplitChapter> splitChapters(long userId, long workId, String text) {
+        ToolCallback tool = splitChaptersTool(userId, workId);
+        if (tool == null) {
+            return List.of(new SplitChapter(null, text));
+        }
+        try {
+            String json = callToolText(tool, Map.of("text", text));
+            if (json.isBlank()) {
+                return List.of(new SplitChapter(null, text));
+            }
+            List<SplitChapter> chapters = objectMapper.readValue(json, new TypeReference<>() {});
+            return (chapters == null || chapters.isEmpty()) ? List.of(new SplitChapter(null, text)) : chapters;
+        } catch (Exception e) {
+            log.error("split_chapters 调用/解析失败，降级为整本一章: {}", e.getMessage());
+            return List.of(new SplitChapter(null, text));
+        }
+    }
+
+    /**
+     * 确定性解析文档内容：调 parse_document_content 返回纯文本。
+     * 8124 不在线或调用失败时返回 null，调用方降级本地解析（核心链路不强依赖 MCP）。
+     */
+    public String parseDocumentContent(long userId, long workId, String fileName, byte[] content) {
+        ToolCallback tool = parseDocumentContentTool(userId, workId);
+        if (tool == null) {
+            return null;
+        }
+        try {
+            String b64 = Base64.getEncoder().encodeToString(content);
+            return callToolText(tool, Map.of("fileName", fileName, "base64Content", b64));
+        } catch (Exception e) {
+            log.error("parse_document_content 调用失败，降级本地解析: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 确定性编码探测：调 detect_encoding 返回编码名（如 UTF-8 / GBK）。
+     * 8124 不在线或失败时返回 null，调用方自行兜底。
+     */
+    public String detectEncoding(long userId, long workId, byte[] content) {
+        ToolCallback tool = detectEncodingTool(userId, workId);
+        if (tool == null) {
+            return null;
+        }
+        try {
+            String b64 = Base64.getEncoder().encodeToString(content);
+            return callToolText(tool, Map.of("base64Content", b64));
+        } catch (Exception e) {
+            log.error("detect_encoding 调用失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /** 调 MCP 工具并取返回的首个文本内容（MCP content 序列化解一层，形如 [{"type":"text","text":"..."}]） */
+    private String callToolText(ToolCallback tool, Map<String, Object> args) throws JsonProcessingException {
+        String raw = tool.call(ModelOptionsUtils.toJsonString(args));
+        JsonNode root = objectMapper.readTree(raw);
+        return root.isArray() && !root.isEmpty() ? root.get(0).path("text").asText("") : "";
     }
 
     /**
