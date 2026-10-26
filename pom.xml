@@ -138,6 +138,18 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- 章节上传/一致性审查：本地解析 PDF / Word（确定性动作，不走 doc-parser MCP） -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.4</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.4.1</version>
+        </dependency>
+
         <!-- Spring AI MCP Client -->
         <dependency>
             <groupId>org.springframework.ai</groupId>

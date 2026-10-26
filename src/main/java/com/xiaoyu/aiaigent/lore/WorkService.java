@@ -87,6 +87,24 @@ public class WorkService {
         return new SwitchResult(token, userId, targetWorkId);
     }
 
+    /** 更新作品信息：校验归属 → 更新标题/类型/简介/作者，返回更新后的完整作品记录 */
+    public WorkRepository.Work update(long userId, long workId, String title, String genre, String intro, String author) {
+        if (title == null || title.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "作品标题不能为空");
+        }
+        WorkRepository.Work existing = workRepository.findById(workId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "作品不存在"));
+        if (existing.userId() == null || existing.userId() != userId) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "无权编辑他人作品");
+        }
+        int rows = workRepository.update(workId, userId, title, genre, intro, author);
+        if (rows == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "作品不存在");
+        }
+        return workRepository.findById(workId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "作品更新失败"));
+    }
+
     /**
      * 删除作品：级联删除该作品全部章节/设定/伏笔/时间线/待确认冲突/审查报告及向量索引。
      * 事务性：所有向量 metadata 都带 workId，一步删干净 vector_store；业务表与向量同库，

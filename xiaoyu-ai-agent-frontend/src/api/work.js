@@ -15,6 +15,11 @@ export function switchWork(targetWorkId) {
   return http.post('/work/switch', { targetWorkId }).then(({ data }) => data);
 }
 
+// 更新作品信息（标题/类型/简介/作者），返回更新后的完整作品记录
+export function updateWork(id, payload) {
+  return http.put(`/work/${id}`, payload).then(({ data }) => data);
+}
+
 // 删除作品（级联删除该作品全部章节/设定/伏笔/时间线/向量）
 export function deleteWork(id) {
   return http.delete(`/work/${id}`);

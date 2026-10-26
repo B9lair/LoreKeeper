@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -30,6 +31,9 @@ public class WorkController {
     public record SwitchWorkRequest(long targetWorkId) {
     }
 
+    public record UpdateWorkRequest(String title, String genre, String intro, String author) {
+    }
+
     @GetMapping("/list")
     public List<WorkRepository.Work> list() {
         return workService.list(TenantContext.get().userId());
@@ -43,6 +47,11 @@ public class WorkController {
     @PostMapping("/switch")
     public WorkService.SwitchResult switchWork(@RequestBody SwitchWorkRequest req) {
         return workService.switchWork(TenantContext.get().userId(), req.targetWorkId());
+    }
+
+    @PutMapping("/{id}")
+    public WorkRepository.Work update(@PathVariable long id, @RequestBody UpdateWorkRequest req) {
+        return workService.update(TenantContext.get().userId(), id, req.title(), req.genre(), req.intro(), req.author());
     }
 
     @DeleteMapping("/{id}")

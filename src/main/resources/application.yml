@@ -3,6 +3,10 @@ spring:
     name: ai-aigent
   Profiles:
     active: local
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
   ai:
     vectorstore:
       pgvector:

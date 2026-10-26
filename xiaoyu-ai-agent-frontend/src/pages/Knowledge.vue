@@ -81,16 +81,29 @@
         </div>
         <div class="modal-body">
           <div class="field">
+            <label class="label">上传文件（TXT / MD / PDF / Word，可多选批量）</label>
+            <div class="upload-file">
+              <input type="file" multiple accept=".txt,.md,.markdown,.pdf,.docx" @change="onFiles" />
+              <span class="hint">PDF / Word 由后端解析为纯文本；多选即批量，逐个入库</span>
+            </div>
+            <div v-if="files.length" class="file-list">
+              <div v-for="(f, i) in files" :key="i" class="file-item">
+                <span class="file-name">{{ f.name }}</span>
+                <span class="file-size mono">{{ fmtSize(f.size) }}</span>
+                <button type="button" class="file-del" title="移除" @click="removeFile(i)">✕</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="divider"><span>或直接粘贴正文</span></div>
+
+          <div class="field">
             <label class="label">章节标题（留空自动命名「第 N 章」）</label>
             <input v-model="uploadTitle" class="input" placeholder="如：第 3 章" />
           </div>
           <div class="field">
-            <label class="label">章节内容（纯文本 / TXT / MD）</label>
-            <textarea v-model="uploadText" class="textarea" rows="10" placeholder="粘贴章节原文…"></textarea>
-          </div>
-          <div class="upload-file">
-            <input type="file" accept=".txt,.md,.markdown" @change="onFile" />
-            <span class="hint">支持 TXT / Markdown（前端 FileReader 读成字符串）</span>
+            <label class="label">章节内容</label>
+            <textarea v-model="uploadText" class="textarea" rows="8" placeholder="粘贴章节原文…"></textarea>
           </div>
           <div v-if="uploadError" class="error-box">{{ uploadError }}</div>
           <div v-else-if="uploadResult" class="success-box">{{ uploadResult }}</div>
@@ -135,9 +148,10 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue';
-import { listChapters, uploadChapter, deleteChapter } from '../api/chapter';
+import { computed, onMounted, ref, watch } from 'vue';
+import { listChapters, uploadChapter, uploadChapterFile, deleteChapter } from '../api/chapter';
 import { listChunks } from '../api/rag';
+import { workStore } from '../stores/work';
 
 const tab = ref('chapter');
 const chapters = ref([]);
@@ -151,6 +165,7 @@ const uploadText = ref('');
 const uploading = ref(false);
 const uploadError = ref('');
 const uploadResult = ref('');
+const files = ref([]); // { name, size, file }
 
 const detailTitle = computed(() => {
   if (tab.value === 'setting') return '设定库 · 独立块';
@@ -200,29 +215,51 @@ const openUpload = () => {
   showUpload.value = true;
 };
 
-const onFile = (e) => {
-  const file = e.target.files && e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    uploadText.value = String(reader.result || '');
-  };
-  reader.readAsText(file, 'utf-8');
+const onFiles = (e) => {
+  const list = Array.from(e.target.files || []);
+  for (const file of list) {
+    files.value.push({ name: file.name, size: file.size, file });
+  }
+  e.target.value = ''; // 清空，允许重复选同一文件
 };
+
+const removeFile = (i) => files.value.splice(i, 1);
+
+const fmtSize = (s) => s < 1024 ? s + ' B'
+  : s < 1048576 ? (s / 1024).toFixed(1) + ' KB'
+  : (s / 1048576).toFixed(1) + ' MB';
 
 const handleUpload = async () => {
   const text = uploadText.value.trim();
-  if (!text) {
-    uploadError.value = '章节内容不能为空';
+  const hasFiles = files.value.length > 0;
+  if (!text && !hasFiles) {
+    uploadError.value = '请选择文件或粘贴章节内容';
     return;
   }
   uploading.value = true;
   uploadError.value = '';
+  uploadResult.value = '';
   try {
-    const r = await uploadChapter(uploadTitle.value.trim() || null, text);
-    uploadResult.value =
-      `「${r.title}」入库完成：新增设定 ${r.newSettings} · 追加设定 ${r.updatedSettings} · ` +
-      `冲突待确认 ${r.conflicts} · 伏笔 ${r.foreshadows}`;
+    if (hasFiles) {
+      // 批量：顺序逐个上传（一章 = 一条记录，失败隔离，进度可展示）
+      const results = [];
+      for (let i = 0; i < files.value.length; i++) {
+        const f = files.value[i];
+        const title = f.name.replace(/\.[^.]+$/, '');
+        const r = await uploadChapterFile(f.file, title);
+        results.push(
+          `「${r.title}」：新增设定 ${r.newSettings} · 追加 ${r.updatedSettings} · 冲突 ${r.conflicts} · 伏笔 ${r.foreshadows}`
+        );
+        uploadResult.value = `已上传 ${i + 1}/${files.value.length} …`;
+      }
+      uploadResult.value = results.join('\n');
+      files.value = [];
+    } else {
+      const r = await uploadChapter(uploadTitle.value.trim() || null, text);
+      uploadResult.value =
+        `「${r.title}」入库完成：新增设定 ${r.newSettings} · 追加设定 ${r.updatedSettings} · ` +
+        `冲突待确认 ${r.conflicts} · 伏笔 ${r.foreshadows}`;
+    }
     uploadTitle.value = '';
     uploadText.value = '';
     await loadChapters();
@@ -263,6 +300,14 @@ const handleDelete = async () => {
 };
 
 onMounted(loadChapters);
+
+// 切换作品：清空章节与分块缓存，重拉新作品的章节列表
+watch(() => workStore.version, () => {
+  chapters.value = [];
+  chunks.value = [];
+  selectedChapterId.value = null;
+  loadChapters();
+});
 </script>
 
 <style scoped>
@@ -460,6 +505,67 @@ onMounted(loadChapters);
 .upload-file {
   display: grid;
   gap: 6px;
+}
+
+.file-list {
+  display: grid;
+  gap: 6px;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-inset);
+}
+
+.file-name {
+  flex: 1;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-size {
+  font-size: 11px;
+  color: var(--text-faint);
+  flex: 0 0 auto;
+}
+
+.file-del {
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.file-del:hover {
+  color: var(--danger);
+  background: rgba(248, 81, 73, 0.14);
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
 }
 
 .kb-item-del {

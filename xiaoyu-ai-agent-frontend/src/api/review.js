@@ -6,6 +6,15 @@ export function reviewChapter(chapterNo, chapterText) {
     .then(({ data }) => data);
 }
 
+// 一致性审查（文件上传）：上传 TXT/MD/PDF/Word，后端本地解析后走确定性审查流水线
+export function reviewFile(file, chapterNo) {
+  const form = new FormData();
+  form.append('file', file);
+  if (chapterNo != null && chapterNo !== '') form.append('chapterNo', String(chapterNo));
+  return http.post('/ai/lore/review/file', form, { timeout: 300000 })
+    .then(({ data }) => data);
+}
+
 // 待确认队列（只含 pending）
 export function listPending() {
   return http.get('/pending/list').then(({ data }) => data);

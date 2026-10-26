@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS work (
     user_id BIGINT REFERENCES users(id),
     title VARCHAR(200) NOT NULL,
     genre VARCHAR(100),
+    intro TEXT,
+    author VARCHAR(100),
     created_at TIMESTAMP DEFAULT now()
 );
 
@@ -101,3 +103,13 @@ SELECT column_name, data_type
 FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'world_setting'
 ORDER BY ordinal_position;
+
+-- ==================== 步骤 4.1 作品编辑（简介/作者）====================
+-- 幂等脚本：给 work 表补 intro（简介）、author（作者）两列
+ALTER TABLE public.work
+    ADD COLUMN IF NOT EXISTS intro TEXT,
+    ADD COLUMN IF NOT EXISTS author VARCHAR(100);
+
+ALTER TABLE public.work
+    ADD COLUMN IF NOT EXISTS intro TEXT,
+    ADD COLUMN IF NOT EXISTS author VARCHAR(100);

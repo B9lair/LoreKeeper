@@ -90,10 +90,11 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { debugIntent, mcpStatus, mcpParse, mcpQuery } from '../api/debug';
 import { searchRag } from '../api/rag';
 import { intentLabel, intentCls } from '../utils/intent';
+import { workStore } from '../stores/work';
 
 const tables = ['character', 'world_setting', 'timeline_event', 'foreshadow'];
 
@@ -182,6 +183,17 @@ const runIntent = async () => {
 };
 
 onMounted(loadStatus);
+
+// 切换作品：清空测试结果缓存，重拉 MCP 状态
+watch(() => workStore.version, () => {
+  parseResult.value = '';
+  parseError.value = '';
+  queryResult.value = '';
+  queryError.value = '';
+  ragHits.value = [];
+  intentResult.value = null;
+  loadStatus();
+});
 </script>
 
 <style scoped>

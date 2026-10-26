@@ -2,6 +2,10 @@
   <div class="chat-shell">
     <!-- 左栏：会话列表 -->
     <aside class="chat-side">
+      <div class="chat-work">
+        <span class="chat-work-label">作品</span>
+        <span class="chat-work-name">{{ workStore.current?.title || '未命名作品' }}</span>
+      </div>
       <button type="button" class="btn ghost" style="width: 100%" @click="newConversation">+ 新对话</button>
       <div class="conv-list">
         <div
@@ -131,10 +135,11 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { streamAssist } from '../api/assist';
 import { listConversations, getConversation, deleteConversation } from '../api/chat';
 import { intentLabel, intentCls } from '../utils/intent';
+import { workStore } from '../stores/work';
 
 const intents = [
   { key: 'WRITE', label: '写新章节', icon: '✍', hint: '写新章节：主角在青阳城第一次遇到女二…' },
@@ -337,6 +342,18 @@ onMounted(async () => {
   }
 });
 
+// 切换作品：中止进行中的对话流，清空会话上下文，重拉新作品的会话列表并新建
+watch(() => workStore.version, async () => {
+  if (ctrl) ctrl.abort();
+  loading.value = false;
+  messages.value = [];
+  selectedId.value = null;
+  currentChatId.value = null;
+  localStorage.removeItem(LAST_CHAT_KEY);
+  await loadConversations();
+  newConversation();
+});
+
 onBeforeUnmount(() => {
   if (ctrl) ctrl.abort();
 });
@@ -359,6 +376,29 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.chat-work {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 2px 4px 0;
+  min-width: 0;
+}
+
+.chat-work-label {
+  font-size: 11px;
+  color: var(--text-faint);
+  flex: 0 0 auto;
+}
+
+.chat-work-name {
+  font-size: 12.5px;
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chat-side-note {

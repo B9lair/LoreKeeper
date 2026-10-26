@@ -7,6 +7,15 @@ export function uploadChapter(title, chapterText) {
     .then(({ data }) => data);
 }
 
+// 上传章节文件（multipart，后端本地解析 PDF/Word/TXT/MD 后走 ingest 链路）
+export function uploadChapterFile(file, title) {
+  const form = new FormData();
+  form.append('file', file);
+  if (title) form.append('title', title);
+  return http.post('/lore/chapter/upload-file', form, { timeout: 300000 })
+    .then(({ data }) => data);
+}
+
 // 列出当前作品的全部章节（按 seq 升序）
 export function listChapters() {
   return http.get('/lore/chapter/list').then(({ data }) => data);

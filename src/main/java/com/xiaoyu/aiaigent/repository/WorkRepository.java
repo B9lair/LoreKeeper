@@ -16,7 +16,7 @@ public class WorkRepository {
     /**
      * 作品实体，对应 work 表。
      */
-    public record Work(Long id, Long userId, String title, String genre) {
+    public record Work(Long id, Long userId, String title, String genre, String intro, String author) {
     }
 
     private final JdbcTemplate jdbcTemplate;
@@ -29,7 +29,9 @@ public class WorkRepository {
             rs.getObject("id", Long.class),
             rs.getObject("user_id", Long.class),
             rs.getString("title"),
-            rs.getString("genre")
+            rs.getString("genre"),
+            rs.getString("intro"),
+            rs.getString("author")
     );
 
     /** 注册时为每个用户创建默认作品，返回自增 id（PostgreSQL RETURNING） */
@@ -63,6 +65,13 @@ public class WorkRepository {
         List<Work> list = jdbcTemplate.query(
                 "SELECT * FROM work WHERE id = ?", ROW_MAPPER, id);
         return list.stream().findFirst();
+    }
+
+    /** 更新作品信息（标题/类型/简介/作者），按 id + user_id 定位防越权，返回受影响行数 */
+    public int update(long id, long userId, String title, String genre, String intro, String author) {
+        return jdbcTemplate.update(
+                "UPDATE work SET title = ?, genre = ?, intro = ?, author = ? WHERE id = ? AND user_id = ?",
+                title, genre, intro, author, id, userId);
     }
 
     /** 删除作品（按 id + user_id 定位，防越权删他人作品），返回受影响行数 */

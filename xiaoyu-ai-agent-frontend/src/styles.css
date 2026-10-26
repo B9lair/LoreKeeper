@@ -106,6 +106,26 @@ body {
   color: var(--text-muted);
 }
 
+.work-switcher {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 8px;
+}
+
+.work-select {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-inset);
+  color: var(--text);
+  font-size: 12.5px;
+  outline: none;
+}
+
 .side-nav {
   flex: 1;
   padding: 10px 8px;

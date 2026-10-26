@@ -17,15 +17,17 @@
           <input v-model="workGenre" class="input" placeholder="类型（可选）" style="max-width: 150px" />
           <button type="button" class="btn primary" @click="handleCreateWork">新建作品</button>
         </div>
+        <div v-if="workError" class="error-box">{{ workError }}</div>
         <table class="table">
           <thead><tr><th>标题</th><th>类型</th><th></th></tr></thead>
           <tbody>
-            <tr v-for="w in works" :key="w.id">
+            <tr v-for="w in workStore.works" :key="w.id">
               <td>{{ w.title }}</td>
               <td>{{ w.genre || '-' }}</td>
               <td class="row-actions">
-                <button v-if="w.id !== currentWorkId" type="button" class="btn sm" @click="handleSwitch(w.id)">切换</button>
+                <button v-if="w.id !== workStore.currentId" type="button" class="btn sm" @click="handleSwitch(w.id)">切换</button>
                 <span v-else class="chip ok">当前</span>
+                <button type="button" class="btn sm" @click="openEdit(w)">编辑</button>
                 <button type="button" class="btn sm danger" @click="handleDeleteWork(w)">删除</button>
               </td>
             </tr>
@@ -144,16 +146,51 @@
         </div>
       </div>
     </div>
+
+    <!-- 编辑作品弹窗 -->
+    <div v-if="editForm" class="overlay" @click.self="editForm = null">
+      <div class="modal">
+        <div class="modal-head">
+          <span class="panel-title">编辑作品</span>
+          <button type="button" class="btn ghost sm" @click="editForm = null">关闭</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label class="label">作品名称</label>
+            <input v-model="editForm.title" class="input" placeholder="作品标题" />
+          </div>
+          <div class="field">
+            <label class="label">类型</label>
+            <input v-model="editForm.genre" class="input" placeholder="如：玄幻 / 都市（可选）" />
+          </div>
+          <div class="field">
+            <label class="label">作者</label>
+            <input v-model="editForm.author" class="input" placeholder="作者名（可选）" />
+          </div>
+          <div class="field">
+            <label class="label">简介</label>
+            <textarea v-model="editForm.intro" class="textarea" rows="4" placeholder="作品简介（可选）"></textarea>
+          </div>
+          <div v-if="editError" class="error-box">{{ editError }}</div>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn ghost" @click="editForm = null">取消</button>
+          <button type="button" class="btn primary" :disabled="saving" @click="handleSaveWork">
+            {{ saving ? '保存中…' : '保存' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
-import { listWorks, createWork, switchWork, deleteWork } from '../api/work';
+import { ref, watch } from 'vue';
 import { listSettings, saveSetting, deleteSetting } from '../api/setting';
 import { listForeshadows, createForeshadow, resolveForeshadow, deleteForeshadow } from '../api/foreshadow';
 import { listPending, acceptPending, rejectPending } from '../api/review';
-import { readAuth, writeAuth, clearAuth } from '../api/http';
+import { workStore, refreshWorks, switchTo, createAndSwitch, removeWork } from '../stores/work';
+import { updateWork } from '../api/work';
 
 const tabs = [
   { key: 'work', label: '作品' },
@@ -163,12 +200,11 @@ const tabs = [
 ];
 
 const tab = ref('work');
-const currentWorkId = ref(readAuth()?.workId || null);
 
-// 作品
-const works = ref([]);
+// 作品（列表与当前作品由全局 workStore 承载）
 const workTitle = ref('');
 const workGenre = ref('');
+const workError = ref('');
 
 // 设定
 const settings = ref([]);
@@ -195,7 +231,7 @@ const switchTab = (t) => {
 };
 
 const loadWorks = async () => {
-  works.value = await listWorks();
+  await refreshWorks();
 };
 
 const loadSettings = async () => {
@@ -212,16 +248,18 @@ const loadPendings = async () => {
 
 const handleCreateWork = async () => {
   if (!workTitle.value.trim()) return;
-  await createWork(workTitle.value.trim(), workGenre.value.trim() || null);
-  workTitle.value = '';
-  workGenre.value = '';
-  loadWorks();
+  workError.value = '';
+  try {
+    await createAndSwitch(workTitle.value.trim(), workGenre.value.trim() || null);
+    workTitle.value = '';
+    workGenre.value = '';
+  } catch (e) {
+    workError.value = '新建失败：' + (e.response?.data?.message || e.message || '未知错误');
+  }
 };
 
 const handleSwitch = async (id) => {
-  const data = await switchWork(id);
-  writeAuth(data); // 换 token
-  window.location.reload(); // workId 变了，全站刷新
+  await switchTo(id);
 };
 
 const resetSettingForm = () => {
@@ -319,28 +357,74 @@ const handleDeleteForeshadow = (id) => {
   });
 };
 
+// 编辑作品
+const editForm = ref(null);
+const saving = ref(false);
+const editError = ref('');
+
+const openEdit = (w) => {
+  editError.value = '';
+  editForm.value = {
+    id: w.id,
+    title: w.title || '',
+    genre: w.genre || '',
+    author: w.author || '',
+    intro: w.intro || ''
+  };
+};
+
+const handleSaveWork = async () => {
+  if (!editForm.value || !editForm.value.title.trim()) {
+    editError.value = '作品名称不能为空';
+    return;
+  }
+  saving.value = true;
+  editError.value = '';
+  try {
+    await updateWork(editForm.value.id, {
+      title: editForm.value.title.trim(),
+      genre: editForm.value.genre.trim() || null,
+      author: editForm.value.author.trim() || null,
+      intro: editForm.value.intro.trim() || null
+    });
+    editForm.value = null;
+    await refreshWorks(); // 标题可能变了，刷新全局作品列表（侧边栏下拉同步）
+  } catch (e) {
+    editError.value = '保存失败：' + (e.response?.data?.message || e.message || '未知错误');
+  } finally {
+    saving.value = false;
+  }
+};
+
 const handleDeleteWork = (work) => {
-  const isCurrent = work.id === currentWorkId.value;
+  const isCurrent = work.id === workStore.currentId;
   askDelete(
     `删除作品「${work.title}」`,
     isCurrent
-      ? '这是当前作品，删除后需重新登录。将级联删除该作品全部章节 / 设定 / 伏笔 / 时间线 / 向量，不可恢复。'
+      ? '这是当前作品，删除后将自动切到其他作品。将级联删除该作品全部章节 / 设定 / 伏笔 / 时间线 / 向量，不可恢复。'
       : '将级联删除该作品全部章节 / 设定 / 伏笔 / 时间线 / 向量，不可恢复。',
     async () => {
       await doDelete(async () => {
-        await deleteWork(work.id);
-        if (isCurrent) {
-          clearAuth();
-          window.location.reload();
-        } else {
-          await loadWorks();
-        }
+        await removeWork(work.id);
       });
     }
   );
 };
 
-onMounted(loadWorks);
+// 作品变化时清空本地缓存数据并重拉当前 tab；immediate 等价于首次挂载加载
+watch(
+  () => workStore.version,
+  () => {
+    settings.value = [];
+    foreshadows.value = [];
+    pendings.value = [];
+    loadWorks();
+    if (tab.value === 'setting') loadSettings();
+    else if (tab.value === 'foreshadow') loadForeshadows();
+    else if (tab.value === 'pending') loadPendings();
+  },
+  { immediate: true }
+);
 </script>
 
 <style scoped>
@@ -408,10 +492,11 @@ onMounted(loadWorks);
 
 .row-actions {
   white-space: nowrap;
+  text-align: right;
 }
 
 .row-actions .btn {
-  margin-right: 4px;
+  margin-left: 4px;
 }
 
 .overlay {
@@ -449,6 +534,14 @@ onMounted(loadWorks);
   overflow-y: auto;
   display: grid;
   gap: 10px;
+}
+
+.modal-foot {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .conflict-item {
