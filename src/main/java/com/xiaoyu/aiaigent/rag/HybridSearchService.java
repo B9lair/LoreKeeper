@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.Filter;
 import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -40,9 +41,14 @@ public class HybridSearchService {
         this.rerankService = rerankService;
     }
 
+    /** types 为 null/空 = 不过滤（向后兼容） */
     public List<Document> search(String query, long workId, int topK) {
-        List<Document> vectorDocs = vectorSearch(query, workId);
-        List<Document> entityDocs = entityMatch(query, workId);
+        return search(query, workId, topK, null);
+    }
+
+    public List<Document> search(String query, long workId, int topK, Set<String> types) {
+        List<Document> vectorDocs = vectorSearch(query, workId, types);
+        List<Document> entityDocs = entityMatch(query, workId, types);
         List<Document> fused = rrfMerger.merge(vectorDocs, entityDocs);
         RerankService rerank = rerankService.getIfAvailable();
         if (rerank != null) {
@@ -51,18 +57,27 @@ public class HybridSearchService {
         return fused.stream().limit(topK).toList();
     }
 
-    private List<Document> vectorSearch(String query, long workId) {
+    private List<Document> vectorSearch(String query, long workId, Set<String> types) {
+        FilterExpressionBuilder fb = new FilterExpressionBuilder();
+        FilterExpressionBuilder.Op workIdOp = fb.eq("workId", String.valueOf(workId));   // 强制 workId 过滤
+        Filter.Expression filter = (types == null || types.isEmpty())
+                ? workIdOp.build()
+                : fb.and(workIdOp, fb.in("type", types.toArray(new Object[0]))).build(); // 按 type 过滤，避免三类内容混召回
         return vectorStore.similaritySearch(SearchRequest.builder()
                 .query(query)
                 .topK(RECALL_N)
-                .filterExpression(new FilterExpressionBuilder()
-                        .eq("workId", String.valueOf(workId))   // 强制 workId 过滤
-                        .build())
+                .filterExpression(filter)
                 .build());
     }
 
-    /** 实体名精确命中提权：从 character 取 name+别名，对 content 做 ILIKE（4.1 L3） */
-    private List<Document> entityMatch(String query, long workId) {
+    /**
+     * 实体名精确命中提权（4.1 L3）：
+     * 主词表取 world_setting.entity（随上传自动维护，覆盖所有已抽取实体，不再依赖 character 种子），
+     * 补充 character 种子数据（name + aliases）作为兜底，对 content 做 ILIKE。
+     */
+    private List<Document> entityMatch(String query, long workId, Set<String> types) {
+        List<String> entities = jdbcTemplate.queryForList(
+                "SELECT DISTINCT entity FROM world_setting WHERE work_id = ?", String.class, workId);
         List<String> names = jdbcTemplate.queryForList(
                 "SELECT name FROM character WHERE work_id = ?", String.class, workId);
         List<String> aliases = jdbcTemplate.queryForList(
@@ -70,6 +85,7 @@ public class HybridSearchService {
                 "WHERE work_id = ? AND aliases IS NOT NULL", String.class, workId);
 
         Set<String> terms = new HashSet<>();
+        terms.addAll(entities);
         terms.addAll(names);
         terms.addAll(aliases);
         terms.removeIf(t -> t == null || t.isBlank() || !query.contains(t));
@@ -78,9 +94,17 @@ public class HybridSearchService {
         }
 
         String[] patterns = terms.stream().map(n -> "%" + n + "%").toArray(String[]::new);
-        // 关键词路同样强制 workId 过滤
+        // 关键词路同样强制 workId 过滤；types 非空时按 type 过滤
         String sql = "SELECT id, content, metadata FROM vector_store " +
                      "WHERE metadata ->> 'workId' = ? AND content ILIKE ANY (?)";
+        if (types != null && !types.isEmpty()) {
+            sql += " AND metadata ->> 'type' = ANY (?)";
+            return jdbcTemplate.query(sql,
+                    (rs, i) -> toDocument(rs.getString("id"),
+                                          rs.getString("content"),
+                                          rs.getString("metadata")),
+                    String.valueOf(workId), (Object) patterns, (Object) types.toArray(new String[0]));
+        }
         return jdbcTemplate.query(sql,
                 (rs, i) -> toDocument(rs.getString("id"),
                                       rs.getString("content"),

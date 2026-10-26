@@ -3,6 +3,7 @@ package com.xiaoyu.aiaigent.eval;
 import com.xiaoyu.aiaigent.lore.NewSetting;
 import com.xiaoyu.aiaigent.lore.SettingMergeService;
 import com.xiaoyu.aiaigent.lore.SettingMergeService.MergeResult;
+import com.xiaoyu.aiaigent.rag.ChunkingService;
 import com.xiaoyu.aiaigent.repository.CharacterRepository;
 import com.xiaoyu.aiaigent.repository.CharacterRepository.Character;
 import com.xiaoyu.aiaigent.repository.WorldSettingRepository;
@@ -11,13 +12,17 @@ import jakarta.annotation.Resource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.mockito.Mockito.mock;
 
 /**
  * 一致性检测评测运行器：真连 DB，人工注入矛盾对（历史断言 valueA + 候选断言 valueB），
@@ -52,7 +57,8 @@ class ConsistencyEvalRunnerTest {
             characterRepository.save(Character.of(TEST_WORK_ID, c.name(), c.aliases(), "角色", null, 1, "alive"));
         }
 
-        mergeService = new SettingMergeService(characterRepository, worldSettingRepository);
+        mergeService = new SettingMergeService(characterRepository, worldSettingRepository,
+                mock(ChunkingService.class), mock(VectorStore.class));
     }
 
     @AfterEach
@@ -65,17 +71,22 @@ class ConsistencyEvalRunnerTest {
         List<Boolean> predicted = new ArrayList<>();
         List<Boolean> expected = new ArrayList<>();
 
+        Map<String, String> aliasToCanonical = buildAliasMap();
+
         for (EvalDataset.ConsistencyCase c : dataset.consistency()) {
+            // 别名归一：历史断言用标准名落库，候选断言用原始名（可能是别名）驱动归并
+            String canonicalEntity = aliasToCanonical.getOrDefault(c.entity(), c.entity());
+
             // 每个样本独立：清掉该实体的历史断言，避免同实体多样本串扰
             jdbcTemplate.update("DELETE FROM world_setting WHERE work_id = ? AND entity = ?",
-                    TEST_WORK_ID, c.entity());
+                    TEST_WORK_ID, canonicalEntity);
 
-            // 历史断言 valueA 已确立（第 3 章）
+            // 历史断言 valueA 已确立（第 3 章），用标准名落库
             worldSettingRepository.save(WorldSetting.of(
-                    TEST_WORK_ID, "person", c.entity() + " 的 " + c.attribute() + "：" + c.valueA(),
-                    c.entity(), c.attribute(), c.valueA(), "第3章历史断言", 3, 1));
+                    TEST_WORK_ID, "person", canonicalEntity + " 的 " + c.attribute() + "：" + c.valueA(),
+                    canonicalEntity, c.attribute(), c.valueA(), "第3章历史断言", 3, 1));
 
-            // 候选断言 valueB（第 50 章）走归并
+            // 候选断言 valueB（第 50 章）用原始 entity（可能是别名）走归并
             NewSetting candidate = new NewSetting(c.entity(), c.attribute(), c.valueB(), "第50章候选断言");
             MergeResult result = mergeService.merge(candidate, TEST_WORK_ID, 50);
 
@@ -88,6 +99,21 @@ class ConsistencyEvalRunnerTest {
 
         System.out.println(">>> 一致性检测评测结果：" + metrics);
         assertFalse(dataset.consistency().isEmpty(), "评测集 consistency 样本不应为空");
+    }
+
+    /** 从种子角色的 aliases 构建「别名 → 标准名」映射，供历史断言归一落库。 */
+    private Map<String, String> buildAliasMap() {
+        Map<String, String> aliasToCanonical = new HashMap<>();
+        if (dataset.seed() != null && dataset.seed().characters() != null) {
+            for (EvalDataset.CharacterSeed c : dataset.seed().characters()) {
+                if (c.aliases() != null) {
+                    for (String alias : c.aliases()) {
+                        aliasToCanonical.put(alias, c.name());
+                    }
+                }
+            }
+        }
+        return aliasToCanonical;
     }
 
     private void cleanup() {

@@ -10,12 +10,6 @@ spring:
         dimensions: 1536
         distance-type: COSINE_DISTANCE
         max-document-batch-size: 10000
-    mcp:
-      client:
-        sse:
-          connections:
-            server1:
-              url: http://localhost:8124
 server:
   port: 8080
   servlet:
@@ -47,10 +41,13 @@ lorekeeper:
   jwt:
     secret: ${LOREKEEPER_JWT_SECRET:LoreKeeper-Dev-Secret-Key-2026}
     expire-ms: 604800000
+  # 对话记忆文件存储目录（FileBasedChatMemory）
+  chat-memory-dir: ${user.dir}/chat-memory
   mcp:
+    doc-parser-url: http://localhost:8124
     database-url: http://localhost:8125
     notify-url: http://localhost:8126
 
 rag:
   rerank:
-    enabled: false
+    enabled: true

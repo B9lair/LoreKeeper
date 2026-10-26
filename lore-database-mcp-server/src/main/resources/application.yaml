@@ -2,7 +2,7 @@ spring:
   application:
     name: lore-database-mcp-server
   datasource:
-    url: jdbc:postgresql://pgm-7xvmj349r98bs2giho.rwlb.cn-guangzhou.rds.aliyuncs.com:5432/LoreKeeper_DB
+    url: jdbc:postgresql://pgm-7xvmj349r98bs2giho.rwlb.cn-guangzhou.rds.aliyuncs.com:5432/LoreKeeper_DB?sslmode=require
     username: wxy
     password: 2v7742()
 server:

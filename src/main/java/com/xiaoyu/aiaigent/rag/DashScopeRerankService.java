@@ -58,7 +58,9 @@ public class DashScopeRerankService implements RerankService {
                     reranked.add(docs.get(idx));
                 }
             }
-            return reranked.isEmpty() ? docs : reranked;
+            List<Document> out = reranked.isEmpty() ? docs : reranked;
+            log.info("rerank 完成：候选 {} 条 -> 重排 {} 条", docs.size(), out.size());
+            return out;
         } catch (ApiException | NoApiKeyException | InputRequiredException e) {
             log.warn("rerank 调用失败，降级为不重排：{}", e.getMessage());
             return docs;

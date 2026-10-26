@@ -95,4 +95,43 @@ public class WorldSettingRepository {
                 Integer.class, workId, entity);
         return (max == null ? 0 : max) + 1;
     }
+
+    /** 列出某作品的全部设定条目（设定管理页） */
+    public List<WorldSetting> findByWorkId(Long workId) {
+        return jdbcTemplate.query(
+                "SELECT * FROM world_setting WHERE work_id = ? ORDER BY id",
+                ROW_MAPPER, workId);
+    }
+
+    /** 更新设定（按 id + work_id 定位，防跨作品误改），返回受影响行数 */
+    public int update(WorldSetting ws) {
+        return jdbcTemplate.update(
+                "UPDATE world_setting SET type = ?, content = ?, entity = ?, attribute = ?, value = ?, " +
+                        "evidence = ?, established_chapter = ?, version = ? WHERE id = ? AND work_id = ?",
+                ws.type(), ws.content(), ws.entity(), ws.attribute(), ws.value(),
+                ws.evidence(), ws.establishedChapter(), ws.version(), ws.id(), ws.workId());
+    }
+
+    /** 删除设定（按 id + work_id 定位，防跨作品误删），返回受影响行数 */
+    public int deleteById(Long id, Long workId) {
+        return jdbcTemplate.update("DELETE FROM world_setting WHERE id = ? AND work_id = ?", id, workId);
+    }
+
+    /** 该章确立的设定 id 列表（删章节级联：先取 id 删向量） */
+    public List<Long> findIdsByChapter(long workId, int seq) {
+        return jdbcTemplate.query(
+                "SELECT id FROM world_setting WHERE work_id = ? AND established_chapter = ?",
+                (rs, rowNum) -> rs.getLong("id"), workId, seq);
+    }
+
+    /** 删除该章确立的设定，返回受影响行数 */
+    public int deleteByChapter(long workId, int seq) {
+        return jdbcTemplate.update(
+                "DELETE FROM world_setting WHERE work_id = ? AND established_chapter = ?", workId, seq);
+    }
+
+    /** 删除作品下全部设定，返回受影响行数 */
+    public int deleteByWorkId(long workId) {
+        return jdbcTemplate.update("DELETE FROM world_setting WHERE work_id = ?", workId);
+    }
 }

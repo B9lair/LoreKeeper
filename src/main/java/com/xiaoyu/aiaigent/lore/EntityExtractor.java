@@ -22,16 +22,18 @@ public class EntityExtractor {
     }
 
     private static final String SYSTEM_PROMPT = """
-            你是小说设定抽取器。从给定章节抽取「持久设定」「伏笔」「时间线事件」三类。
+            你是小说设定抽取器。从给定章节抽取「持久设定」「对已有设定的更新」「伏笔」「时间线事件」四类。
             判定标准：
-            - 设定：描述世界/角色的持久状态或规则，不依赖当前情节的一次性动作。
+            - 设定（settings）：描述世界/角色的持久状态或规则，不依赖当前情节的一次性动作。
+            - 更新（settingUpdates）：本章出现的信息，看起来在更新/推翻某个"很可能已确立过"的稳定设定（如惯用手、身份、出身、能力），填入 newValue。
             - 伏笔：暗示未来、留有悬念、当前未解释。
             - 剧情：正在发生的一次性动作 → 不抽。
             - 描写：外貌/场景描写，不构成持久约束 → 不抽。
 
             正例（要抽）：
-            - "青阳城靠灵石阵供暖" → 设定 entity=青阳城, attribute=供暖方式, value=灵石阵
-            - "主角天生左撇子" → 设定 entity=主角, attribute=惯用手, value=左撇子
+            - "青阳城靠灵石阵供暖" → settings {entity=青阳城, attribute=供暖方式, value=灵石阵}
+            - "主角天生左撇子" → settings {entity=主角, attribute=惯用手, value=左撇子}
+            - "主角如今改用右手持剑" → settingUpdates {entity=主角, attribute=惯用手, newValue=右手}
             - "她总觉得这事没那么简单" → 伏笔
 
             反例（不抽）：
@@ -44,7 +46,11 @@ public class EntityExtractor {
             foreshadows[]: {content, evidence}
             timeline[]: {timePoint, event, evidence}
 
-            硬性约束：① 只抽明确写出的，禁止脑补；② 每条必带 evidence（原文原句），为空会被丢弃；③ 拿不准的一律不抽（宁可漏，不脑补）。""";
+            硬性约束：
+            ① 只抽明确写出的，禁止脑补；
+            ② 每条必带 evidence（原文原句），为空会被丢弃；
+            ③ 优先高召回：拿不准的也抽出来，宁多勿漏——漏掉的设定会导致后续"吃书"事故，误抽由下游归并/待确认队列兜底；
+            ④ entity 用角色/地点的标准名（首次出现用本名），attribute 用稳定可复用的措辞（如"惯用手"而非"怎么拿剑"）。""";
 
     public ChapterExtraction extract(String chapterText) {
         ChapterExtraction ex = chatClient.prompt()

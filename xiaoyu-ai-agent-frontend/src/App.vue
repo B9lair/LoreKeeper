@@ -1,44 +1,46 @@
 <template>
-  <div class="app-container">
-    <header class="app-header">
-      <div class="brand">
-        <div class="brand-mark" aria-hidden="true"></div>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="side-brand">
+        <div class="brand-mark" aria-hidden="true">L</div>
         <div class="brand-text">
-          <h1>小渝 AI 应用</h1>
-          <div class="brand-subtitle">SSE · Stream · Agents</div>
+          <span class="brand-name">LoreKeeper</span>
+          <span class="brand-sub">设定守护者</span>
         </div>
       </div>
-      <nav class="nav-links">
-        <RouterLink to="/">主页</RouterLink>
-        <RouterLink to="/lore-keeper">LoreKeeper 设定守护者</RouterLink>
-        <RouterLink to="/manus">AI 超级智能体</RouterLink>
+
+      <nav class="side-nav">
+        <RouterLink to="/" class="nav-item">
+          <span class="nav-icon" aria-hidden="true">◫</span>对话
+        </RouterLink>
+        <RouterLink to="/rag" class="nav-item">
+          <span class="nav-icon" aria-hidden="true">▤</span>知识库
+        </RouterLink>
+        <RouterLink to="/test" class="nav-item">
+          <span class="nav-icon" aria-hidden="true">⌘</span>测试
+        </RouterLink>
+        <RouterLink to="/data" class="nav-item">
+          <span class="nav-icon" aria-hidden="true">☷</span>数据
+        </RouterLink>
       </nav>
-    </header>
+
+      <div class="side-foot">
+        <button type="button" class="nav-item ghost" @click="reset">退出演示</button>
+      </div>
+    </aside>
 
     <main class="app-main">
       <RouterView />
     </main>
-
-    <footer class="app-footer">
-      <div class="footer-inner">
-        <div class="footer-left">
-          <span class="footer-brand">小渝 AI 应用</span>
-          <span class="footer-sep">·</span>
-          <span>© {{ year }} Xiaoyu</span>
-          <span class="footer-sep">·</span>
-          <span class="footer-note">All rights reserved</span>
-        </div>
-        <div class="footer-right">
-          <span class="footer-note">Powered by SSE · Vue3</span>
-        </div>
-      </div>
-    </footer>
   </div>
 </template>
 
 <script setup>
 import { RouterLink, RouterView } from 'vue-router';
+import { clearAuth } from './api/http';
 
-const year = new Date().getFullYear();
+const reset = () => {
+  clearAuth();
+  window.location.href = '/';
+};
 </script>
-

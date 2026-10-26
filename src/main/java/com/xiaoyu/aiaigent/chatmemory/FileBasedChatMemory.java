@@ -6,21 +6,26 @@ import com.esotericsoftware.kryo.io.Output;
 import org.objenesis.strategy.StdInstantiatorStrategy;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 
 /**
  * 基于文件持久化的对话记忆
  */
+@Component
 public class FileBasedChatMemory implements ChatMemory {
 
     // 存储路径
-    private final String BASE_DIR;
+    private final String baseDir;
     private static final Kryo kryo = new Kryo();
 
     // 动态注册序列化类
@@ -31,11 +36,11 @@ public class FileBasedChatMemory implements ChatMemory {
     }
 
     // 构造对象时，指定文件保存目录
-    public FileBasedChatMemory(String dir) {
-        this.BASE_DIR = dir;
-        File baseDir = new File(dir);
-        if (!baseDir.exists()) {
-            baseDir.mkdirs();
+    public FileBasedChatMemory(@Value("${lorekeeper.chat-memory-dir:${user.dir}/chat-memory}") String dir) {
+        this.baseDir = dir;
+        File dirFile = new File(dir);
+        if (!dirFile.exists()) {
+            dirFile.mkdirs();
         }
     }
 
@@ -100,6 +105,36 @@ public class FileBasedChatMemory implements ChatMemory {
      * @return
      */
     private File getConversationFile(String conversationId) {
-        return new File(BASE_DIR, conversationId + ".kryo");
+        return new File(baseDir, conversationId + ".kryo");
+    }
+
+    /** 会话元信息：conversationId + 文件最后修改时间（毫秒） */
+    public record ConversationInfo(String conversationId, long lastModified) {
+    }
+
+    /**
+     * 列出所有会话（按最近修改时间倒序）
+     */
+    public List<ConversationInfo> listConversations() {
+        File dir = new File(baseDir);
+        File[] files = dir.listFiles((d, name) -> name.endsWith(".kryo"));
+        if (files == null) {
+            return List.of();
+        }
+        return Arrays.stream(files)
+                .sorted(Comparator.comparingLong(File::lastModified).reversed())
+                .map(f -> {
+                    String name = f.getName();
+                    String id = name.substring(0, name.length() - ".kryo".length());
+                    return new ConversationInfo(id, f.lastModified());
+                })
+                .toList();
+    }
+
+    /**
+     * 读取某会话的完整历史（不截断）
+     */
+    public List<Message> getAllMessages(String conversationId) {
+        return getOrCreateConversation(conversationId);
     }
 }

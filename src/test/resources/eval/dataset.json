@@ -35,7 +35,11 @@
     { "entity": "青阳城", "attribute": "供暖方式", "valueA": "灵石阵", "valueB": "灵石阵", "isConflict": false },
     { "entity": "女二", "attribute": "身份", "valueA": "剑修", "valueB": "剑修", "isConflict": false },
     { "entity": "主角", "attribute": "惯用手", "valueA": "左撇子", "valueB": "惯用左手", "isConflict": false },
-    { "entity": "主角", "attribute": "出身", "valueA": "青阳城", "valueB": "青阳城人", "isConflict": false }
+    { "entity": "主角", "attribute": "出身", "valueA": "青阳城", "valueB": "青阳城人", "isConflict": false },
+    { "entity": "林玄", "attribute": "出身", "valueA": "青阳城", "valueB": "云州", "isConflict": true },
+    { "entity": "林玄", "attribute": "出身", "valueA": "青阳城", "valueB": "青阳城", "isConflict": false },
+    { "entity": "柳如烟", "attribute": "身份", "valueA": "剑修", "valueB": "药师", "isConflict": true },
+    { "entity": "柳如烟", "attribute": "身份", "valueA": "剑修", "valueB": "剑修", "isConflict": false }
   ],
   "extraction": [
     {

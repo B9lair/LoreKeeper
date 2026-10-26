@@ -7,6 +7,7 @@ import com.xiaoyu.aiaigent.repository.UserRepository;
 import com.xiaoyu.aiaigent.rag.HybridSearchService;
 import com.xiaoyu.aiaigent.tools.SettingSearchTool;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbacks;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 配置 Agent 工厂
@@ -30,6 +32,8 @@ public class LoreAgentFactory {
 
     private final UserRepository userRepository;
 
+    private final ChatMemory chatMemory;
+
     private final ToolCallback[] writeTools;
     private final ToolCallback[] reviewTools;
     private final ToolCallback[] queryTools;
@@ -39,6 +43,7 @@ public class LoreAgentFactory {
                             HybridSearchService hybridSearchService,
                             McpClientPool mcpClientPool,
                             UserRepository userRepository,
+                            ChatMemory chatMemory,
                             ToolCallback[] writeTools,
                             ToolCallback[] reviewTools,
                             ToolCallback[] queryTools,
@@ -47,17 +52,24 @@ public class LoreAgentFactory {
         this.hybridSearchService = hybridSearchService;
         this.mcpClientPool = mcpClientPool;
         this.userRepository = userRepository;
+        this.chatMemory = chatMemory;
         this.writeTools = writeTools;
         this.reviewTools = reviewTools;
         this.queryTools = queryTools;
         this.foreshadowTools = foreshadowTools;
     }
 
-    public ToolCallAgent create(IntentRouter.Intent intent, TenantContext.Tenant tenant) {
+    public ToolCallAgent create(IntentRouter.Intent intent, TenantContext.Tenant tenant, String conversationId) {
+        return create(intent, null, tenant, conversationId);
+    }
+
+    public ToolCallAgent create(IntentRouter.Intent intent, IntentRouter.QuerySubType querySubType,
+                                TenantContext.Tenant tenant, String conversationId) {
         long workId = tenant.workId();
-        // workId 在此绑定进检索工具，模型只传 query，服务端注入 workId（2.7 隔离）
-        ToolCallback settingSearch =
-                ToolCallbacks.from(new SettingSearchTool(hybridSearchService, workId))[0];
+        // workId 在此绑定进检索工具，模型只传 query，服务端注入 workId（2.7 隔离）；
+        // types 硬过滤（WRITE/REVIEW）与 preferredTypes 优先召回（QUERY_SETTING）按意图/子类型裁剪
+        ToolCallback settingSearch = ToolCallbacks.from(
+                new SettingSearchTool(hybridSearchService, workId, settingTypes(intent), preferredTypes(intent, querySubType)))[0];
         // database MCP：每 workId 一条带 JWT 的连接（连接级鉴权），从池取 query_database（3.1）
         ToolCallback queryDatabase = mcpClientPool.queryDatabaseTool(tenant.userId(), workId);
         // notify MCP（3.2）：收件人 = 当前登录用户邮箱，服务端从 userId 查，模型不可填
@@ -67,14 +79,20 @@ public class LoreAgentFactory {
         ToolCallback sendEmail = email == null
                 ? null
                 : mcpClientPool.sendEmailTool(tenant.userId(), workId, email);
+        // doc-parser（2.1）：解析 TXT/MD/PDF/Word 为纯文本，REVIEW 工作流按需调用（懒连接，失败降级为 null）
+        ToolCallback parseDocument = mcpClientPool.parseDocumentTool(tenant.userId(), workId);
 
-        return switch (intent) {
+        ToolCallAgent agent = switch (intent) {
             case WRITE       -> newAgent("设定提示", WRITE_SOP, merge(settingSearch, writeTools));
-            case REVIEW      -> newAgent("一致性审查", REVIEW_SOP, merge(settingSearch, reviewTools));
+            case REVIEW      -> newAgent("一致性审查", REVIEW_SOP, merge(settingSearch, reviewTools, parseDocument));
             case QUERY       -> newAgent("世界观问答", QUERY_SOP, merge(settingSearch, queryTools, queryDatabase));
             case FORESHADOW  -> newAgent("伏笔追踪", FORESHADOW_SOP, merge(settingSearch, foreshadowTools, queryDatabase, sendEmail));
             default          -> newAgent("通用", CHAT_SOP, merge(settingSearch, queryTools, queryDatabase, sendEmail));
         };
+        // 绑定会话记忆：conversationId 用于多轮记忆隔离（为空则不启用）
+        agent.setConversationId(conversationId);
+        agent.setChatMemory(chatMemory);
+        return agent;
     }
 
     private ToolCallAgent newAgent(String name, String sop, ToolCallback[] tools) {
@@ -87,6 +105,22 @@ public class LoreAgentFactory {
                 .defaultAdvisors(new MyLoggerAdvisor())
                 .build());
         return agent;
+    }
+
+    /** 各工作流检索的 type 白名单：提示卡聚焦设定+伏笔，审查聚焦设定，其余（问答/伏笔/闲聊）全量不过滤 */
+    private static Set<String> settingTypes(IntentRouter.Intent intent) {
+        return switch (intent) {
+            case WRITE -> Set.of("setting", "foreshadow");
+            case REVIEW -> Set.of("setting");
+            default -> null;
+        };
+    }
+
+    /** QUERY 子类型细分：仅「问设定」启用优先召回（优先设定/伏笔，不足补章节），其余（问剧情/降级/其他意图）全量 */
+    static Set<String> preferredTypes(IntentRouter.Intent intent, IntentRouter.QuerySubType querySubType) {
+        return (intent == IntentRouter.Intent.QUERY && querySubType == IntentRouter.QuerySubType.SETTING)
+                ? Set.of("setting", "foreshadow")
+                : null;
     }
 
     /** settingSearch 放最前；mcpTools 可能含 null（MCP 未连接/降级），merge 时跳过 */
@@ -105,7 +139,8 @@ public class LoreAgentFactory {
     static final String WRITE_SOP = """
         你是「设定提示」工作流。用户写新章节前，检索与当前剧情相关的已确立设定，生成设定提示卡。
         流程：① 调 settingSearch 检索相关设定 ② 按人物/地点/时间线/伏笔分类整理 ③ 输出提示卡。
-        只引用检索到的设定，禁止脑补新设定。""";
+        只引用检索到的设定，禁止脑补新设定。
+        同一个 query 只检索一次，禁止重复检索；检索不到相关设定时，直接说明"未检索到相关设定"并基于已有信息给出提示，然后调用 doTerminate 结束。""";
 
     static final String REVIEW_SOP = """
         你是「一致性审查」工作流。用户提交新写的一章，逐条比对已有设定，输出矛盾清单。
@@ -114,7 +149,8 @@ public class LoreAgentFactory {
 
     static final String QUERY_SOP = """
         你是「世界观问答」工作流。自然语言问设定，语义检索 + 结构化查询回答。
-        流程：① 调 settingSearch 语义检索 ② 需精确字段（如伏笔状态）时调 queryDatabase ③ 综合回答并注明出处。""";
+        流程：① 调 settingSearch 语义检索 ② 需精确字段（如伏笔状态）时调 queryDatabase ③ 综合回答并注明出处。
+        同一个 query 只检索一次，禁止重复检索；无论检索结果是否理想，都必须基于已有结果如实回答，回答后立即调用 doTerminate 结束。""";
 
     static final String FORESHADOW_SOP = """
         你是「伏笔追踪」工作流，负责查询未回收伏笔并邮件提醒作者。

@@ -1,0 +1,500 @@
+<template>
+  <div class="kb-page">
+    <div class="kb-toolbar">
+      <div class="kb-title">知识库 · RAG 分块</div>
+      <button type="button" class="btn primary" @click="openUpload">+ 上传章节</button>
+    </div>
+
+    <div class="kb-grid">
+      <!-- 左：列表 -->
+      <aside class="panel kb-side">
+        <div class="kb-tabs">
+          <button type="button" class="kb-tab" :class="{ active: tab === 'chapter' }" @click="switchTab('chapter')">
+            章节
+          </button>
+          <button type="button" class="kb-tab" :class="{ active: tab === 'setting' }" @click="switchTab('setting')">
+            设定库
+          </button>
+          <button type="button" class="kb-tab" :class="{ active: tab === 'foreshadow' }" @click="switchTab('foreshadow')">
+            伏笔库
+          </button>
+        </div>
+
+        <div class="kb-list">
+          <template v-if="tab === 'chapter'">
+            <div
+              v-for="ch in chapters"
+              :key="ch.id"
+              class="kb-item"
+              :class="{ active: selectedChapterId === ch.id }"
+              @click="selectChapter(ch)"
+            >
+              <span class="kb-item-title">{{ ch.title }}</span>
+              <span class="kb-item-meta mono">seq {{ ch.seq }}</span>
+              <button
+                type="button"
+                class="kb-item-del"
+                title="删除该章节（级联删除设定/伏笔/向量）"
+                @click.stop="askDelete(ch)"
+              >✕</button>
+            </div>
+            <div v-if="chapters.length === 0" class="empty">暂无章节，先上传一章</div>
+          </template>
+          <div v-else class="kb-list-tip hint">
+            {{ tab === 'setting' ? '设定独立块：一条设定 = 一块，绝不切碎。' : '伏笔块：伏笔片段独立成块。' }}
+          </div>
+        </div>
+      </aside>
+
+      <!-- 右：分块详情 -->
+      <section class="panel kb-detail">
+        <div class="panel-head">
+          <span class="panel-title">{{ detailTitle }}</span>
+          <span class="panel-sub">{{ chunks.length }} 块</span>
+        </div>
+        <div class="panel-body">
+          <div v-if="loadingChunks" class="hint">加载中…</div>
+          <div v-else-if="chunks.length === 0" class="empty">
+            {{ tab === 'chapter' ? '选择左侧章节查看分块' : '该库暂无分块' }}
+          </div>
+          <div v-else class="chunk-list">
+            <div v-for="c in chunks" :key="c.id" class="chunk-card" :class="'chunk-' + c.type">
+              <div class="chunk-head">
+                <span class="chip">{{ c.type }}</span>
+                <span class="chunk-meta mono">ch#{{ c.chapterNo || '-' }} · {{ c.length }} 字</span>
+                <span v-if="c.entityId" class="chunk-meta mono">entityId={{ c.entityId }}</span>
+                <span v-if="c.parentId" class="chunk-meta mono">parent={{ c.parentId }}</span>
+              </div>
+              <div class="chunk-content">{{ c.content }}</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- 上传弹窗 -->
+    <div v-if="showUpload" class="overlay" @click.self="showUpload = false">
+      <div class="modal">
+        <div class="modal-head">
+          <span class="panel-title">上传章节</span>
+          <button type="button" class="btn ghost sm" @click="showUpload = false">关闭</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label class="label">章节标题（留空自动命名「第 N 章」）</label>
+            <input v-model="uploadTitle" class="input" placeholder="如：第 3 章" />
+          </div>
+          <div class="field">
+            <label class="label">章节内容（纯文本 / TXT / MD）</label>
+            <textarea v-model="uploadText" class="textarea" rows="10" placeholder="粘贴章节原文…"></textarea>
+          </div>
+          <div class="upload-file">
+            <input type="file" accept=".txt,.md,.markdown" @change="onFile" />
+            <span class="hint">支持 TXT / Markdown（前端 FileReader 读成字符串）</span>
+          </div>
+          <div v-if="uploadError" class="error-box">{{ uploadError }}</div>
+          <div v-else-if="uploadResult" class="success-box">{{ uploadResult }}</div>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn ghost" @click="showUpload = false">取消</button>
+          <button type="button" class="btn primary" :disabled="uploading" @click="handleUpload">
+            {{ uploading ? '上传中…' : '上传' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 删除章节确认弹窗 -->
+    <div v-if="confirmDelete" class="overlay" @click.self="confirmDelete = null">
+      <div class="modal">
+        <div class="modal-head">
+          <span class="panel-title">删除章节「{{ confirmDelete.title }}」</span>
+          <button type="button" class="btn ghost sm" @click="confirmDelete = null">关闭</button>
+        </div>
+        <div class="modal-body">
+          <div class="delete-warn">
+            该操作<b>不可恢复</b>，将级联删除：
+            <ul>
+              <li>章节原文 + 章节向量分块</li>
+              <li>该章确立的设定（含向量索引）</li>
+              <li>该章埋设的伏笔（含向量索引）</li>
+              <li>该章时间线、待确认冲突、审查报告</li>
+            </ul>
+          </div>
+          <div v-if="deleteError" class="error-box">{{ deleteError }}</div>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn ghost" @click="confirmDelete = null">取消</button>
+          <button type="button" class="btn danger" :disabled="deleting" @click="handleDelete">
+            {{ deleting ? '删除中…' : '确认删除' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { computed, onMounted, ref } from 'vue';
+import { listChapters, uploadChapter, deleteChapter } from '../api/chapter';
+import { listChunks } from '../api/rag';
+
+const tab = ref('chapter');
+const chapters = ref([]);
+const chunks = ref([]);
+const selectedChapterId = ref(null);
+const loadingChunks = ref(false);
+
+const showUpload = ref(false);
+const uploadTitle = ref('');
+const uploadText = ref('');
+const uploading = ref(false);
+const uploadError = ref('');
+const uploadResult = ref('');
+
+const detailTitle = computed(() => {
+  if (tab.value === 'setting') return '设定库 · 独立块';
+  if (tab.value === 'foreshadow') return '伏笔库 · 独立块';
+  const ch = chapters.value.find((c) => c.id === selectedChapterId.value);
+  return ch ? `章节「${ch.title}」父子分块` : '章节分块';
+});
+
+const loadChapters = async () => {
+  chapters.value = await listChapters();
+  if (chapters.value.length && selectedChapterId.value == null) {
+    selectChapter(chapters.value[0]);
+  }
+};
+
+const loadChunks = async () => {
+  loadingChunks.value = true;
+  try {
+    if (tab.value === 'chapter') {
+      if (selectedChapterId.value == null) {
+        chunks.value = [];
+        return;
+      }
+      chunks.value = await listChunks({ chapterId: selectedChapterId.value });
+    } else {
+      chunks.value = await listChunks({ type: tab.value });
+    }
+  } finally {
+    loadingChunks.value = false;
+  }
+};
+
+const selectChapter = (ch) => {
+  selectedChapterId.value = ch.id;
+  loadChunks();
+};
+
+const switchTab = (t) => {
+  tab.value = t;
+  if (t === 'chapter') loadChapters();
+  else loadChunks();
+};
+
+const openUpload = () => {
+  uploadError.value = '';
+  uploadResult.value = '';
+  showUpload.value = true;
+};
+
+const onFile = (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    uploadText.value = String(reader.result || '');
+  };
+  reader.readAsText(file, 'utf-8');
+};
+
+const handleUpload = async () => {
+  const text = uploadText.value.trim();
+  if (!text) {
+    uploadError.value = '章节内容不能为空';
+    return;
+  }
+  uploading.value = true;
+  uploadError.value = '';
+  try {
+    const r = await uploadChapter(uploadTitle.value.trim() || null, text);
+    uploadResult.value =
+      `「${r.title}」入库完成：新增设定 ${r.newSettings} · 追加设定 ${r.updatedSettings} · ` +
+      `冲突待确认 ${r.conflicts} · 伏笔 ${r.foreshadows}`;
+    uploadTitle.value = '';
+    uploadText.value = '';
+    await loadChapters();
+  } catch (e) {
+    uploadError.value = '上传失败：' + (e.response?.data?.message || e.message || '未知错误');
+  } finally {
+    uploading.value = false;
+  }
+};
+
+const confirmDelete = ref(null);
+const deleting = ref(false);
+const deleteError = ref('');
+
+const askDelete = (ch) => {
+  deleteError.value = '';
+  confirmDelete.value = ch;
+};
+
+const handleDelete = async () => {
+  const ch = confirmDelete.value;
+  if (!ch) return;
+  deleting.value = true;
+  deleteError.value = '';
+  try {
+    await deleteChapter(ch.id);
+    confirmDelete.value = null;
+    if (selectedChapterId.value === ch.id) {
+      selectedChapterId.value = null;
+      chunks.value = [];
+    }
+    await loadChapters();
+  } catch (e) {
+    deleteError.value = '删除失败：' + (e.response?.data?.message || e.message || '未知错误');
+  } finally {
+    deleting.value = false;
+  }
+};
+
+onMounted(loadChapters);
+</script>
+
+<style scoped>
+.kb-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kb-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.kb-title {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.kb-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 12px;
+}
+
+.kb-side {
+  min-height: 0;
+}
+
+.kb-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.kb-tab {
+  flex: 1;
+  padding: 6px 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.kb-tab.active {
+  background: rgba(68, 147, 248, 0.14);
+  color: var(--text);
+}
+
+.kb-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kb-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.kb-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.kb-item.active {
+  background: rgba(68, 147, 248, 0.14);
+  color: var(--text);
+}
+
+.kb-item-title {
+  font-size: 13px;
+}
+
+.kb-item-meta {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.kb-list-tip {
+  padding: 10px;
+}
+
+.kb-detail {
+  min-height: 0;
+}
+
+.chunk-list {
+  display: grid;
+  gap: 10px;
+}
+
+.chunk-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-inset);
+  padding: 10px 12px;
+}
+
+.chunk-card.chunk-setting {
+  border-color: rgba(163, 113, 247, 0.35);
+}
+
+.chunk-card.chunk-foreshadow {
+  border-color: rgba(240, 136, 62, 0.35);
+}
+
+.chunk-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.chunk-meta {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.chunk-content {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.modal {
+  width: 100%;
+  max-width: 640px;
+  max-height: 84vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-body {
+  padding: 16px;
+  overflow-y: auto;
+  display: grid;
+  gap: 14px;
+}
+
+.modal-foot {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.upload-file {
+  display: grid;
+  gap: 6px;
+}
+
+.kb-item-del {
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 3px 7px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.kb-item:hover .kb-item-del {
+  opacity: 1;
+}
+
+.kb-item-del:hover {
+  color: var(--danger);
+  background: rgba(248, 81, 73, 0.14);
+}
+
+.delete-warn {
+  padding: 12px 14px;
+  border: 1px solid rgba(248, 81, 73, 0.4);
+  border-radius: var(--radius-sm);
+  background: rgba(248, 81, 73, 0.06);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.delete-warn ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+</style>

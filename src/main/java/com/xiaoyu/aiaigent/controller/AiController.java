@@ -2,6 +2,7 @@ package com.xiaoyu.aiaigent.controller;
 
 import com.xiaoyu.aiaigent.agent.IntentRouter;
 import com.xiaoyu.aiaigent.agent.LoreAgentFactory;
+import com.xiaoyu.aiaigent.agent.ToolCallAgent;
 import com.xiaoyu.aiaigent.app.LoreKeeper;
 import com.xiaoyu.aiaigent.common.TenantContext;
 import jakarta.annotation.Resource;
@@ -75,10 +76,19 @@ public class AiController {
      * 统一入口：意图路由 + 配置 Agent
      */
     @GetMapping("/lore/chat")
-    public SseEmitter doChatWithLore(String message) {
+    public SseEmitter doChatWithLore(String message, String chatId) {
         TenantContext.Tenant tenant = TenantContext.get();   // 异步前显式取（ThreadLocal 不跨线程）
-        IntentRouter.Intent intent = intentRouter.route(message);
-        return loreAgentFactory.create(intent, tenant).runstream(message);
+        IntentRouter.RouteResult route = intentRouter.route(message);
+        IntentRouter.Intent intent = route.intent();
+        IntentRouter.QuerySubType querySubType = route.querySubType();
+        // conversationId 加 userId 前缀，实现多租户会话隔离（chatId 为空则不启用记忆）
+        // 分隔符用 "_" 而非 ":"：Windows 文件名不允许冒号，":" 会被当作 ADS 数据流导致文件写错
+        String conversationId = (chatId == null || chatId.isBlank())
+                ? null
+                : tenant.userId() + "_" + chatId;
+        ToolCallAgent agent = loreAgentFactory.create(intent, querySubType, tenant, conversationId);
+        agent.setIntent(intent.name());   // 前端据此渲染意图徽章（event:intent）
+        return agent.runstream(message);
     }
 
     /**

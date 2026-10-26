@@ -1,34 +1,42 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import Home from '../pages/Home.vue';
-import LoreKeeperChat from '../pages/LoreKeeperChat.vue';
-import ManusChat from '../pages/ManusChat.vue';
+import { readAuth } from '../api/http';
+import { demoLogin } from '../api/auth';
 
 const routes = [
   {
     path: '/',
-    name: 'home',
-    component: Home,
+    name: 'chat',
+    component: () => import('../pages/Chat.vue'),
     meta: {
-      title: '小渝 AI 应用｜极客风格 AI 聊天',
-      description: '一个极客风格的 AI 应用入口：LoreKeeper 设定守护者与 AI 超级智能体，SSE 实时流式对话。'
+      title: '对话｜LoreKeeper 设定守护者',
+      description: 'Agentic RAG 对话：意图路由 + 工具调用可观测。'
     }
   },
   {
-    path: '/lore-keeper',
-    name: 'lore-keeper',
-    component: LoreKeeperChat,
+    path: '/rag',
+    name: 'rag',
+    component: () => import('../pages/Knowledge.vue'),
     meta: {
-      title: 'LoreKeeper 设定守护者｜小渝 AI 应用',
-      description: '设定一致性校验与伏笔追踪：SSE 流式聊天，会话 chatId 区分不同对话。'
+      title: '知识库｜LoreKeeper 设定守护者',
+      description: 'RAG 分块可视化：章节父子分块 + 设定独立块。'
     }
   },
   {
-    path: '/manus',
-    name: 'manus',
-    component: ManusChat,
+    path: '/test',
+    name: 'test',
+    component: () => import('../pages/TestLab.vue'),
     meta: {
-      title: 'AI 超级智能体｜小渝 AI 应用',
-      description: '超级智能体多步骤推理：SSE 实时输出，每个步骤独立气泡展示。'
+      title: '测试台｜LoreKeeper 设定守护者',
+      description: 'MCP 工具测试 + RAG 检索测试 + 意图路由测试。'
+    }
+  },
+  {
+    path: '/data',
+    name: 'data',
+    component: () => import('../pages/DataManage.vue'),
+    meta: {
+      title: '数据｜LoreKeeper 设定守护者',
+      description: '作品 / 设定 / 伏笔 / 待确认队列管理。'
     }
   }
 ];
@@ -36,6 +44,18 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes
+});
+
+// 路由守卫：无 token 时自动 demo 登录（登录注册暂时忽略）
+router.beforeEach(async (to) => {
+  const auth = readAuth();
+  if (auth && auth.token) return true;
+  try {
+    await demoLogin();
+  } catch (e) {
+    // 后端不可用：放行，页面自行显示错误态
+  }
+  return true;
 });
 
 function upsertMetaTag(attrName, attrValue, content) {
@@ -53,7 +73,6 @@ function upsertMetaTag(attrName, attrValue, content) {
 router.afterEach((to) => {
   const title = to.meta?.title;
   const description = to.meta?.description;
-
   if (title) document.title = title;
   if (description) {
     upsertMetaTag('name', 'description', description);
@@ -63,4 +82,3 @@ router.afterEach((to) => {
 });
 
 export default router;
-

@@ -39,6 +39,8 @@ public class McpClientPool {
 
     private final String notifyMcpUrl;
 
+    private final String docParserMcpUrl;
+
     /** key = workId，value = (工具名 -> 该 workId 专属 ToolCallback) */
     private final Map<Long, Map<String, ToolCallback>> toolCache = new ConcurrentHashMap<>();
 
@@ -48,11 +50,13 @@ public class McpClientPool {
     public McpClientPool(JwtService jwtService,
                          ForeshadowRepository foreshadowRepository,
                          @Value("${lorekeeper.mcp.database-url:http://localhost:8125}") String databaseMcpUrl,
-                         @Value("${lorekeeper.mcp.notify-url:http://localhost:8126}") String notifyMcpUrl) {
+                         @Value("${lorekeeper.mcp.notify-url:http://localhost:8126}") String notifyMcpUrl,
+                         @Value("${lorekeeper.mcp.doc-parser-url:http://localhost:8124}") String docParserMcpUrl) {
         this.jwtService = jwtService;
         this.foreshadowRepository = foreshadowRepository;
         this.databaseMcpUrl = databaseMcpUrl;
         this.notifyMcpUrl = notifyMcpUrl;
+        this.docParserMcpUrl = docParserMcpUrl;
     }
 
     /** 获取某 tenant 专属的 query_database 工具（3.1） */
@@ -69,6 +73,11 @@ public class McpClientPool {
                 "body", buildForeshadowReminderBody(workId));
         return tool(userId, workId, notifyMcpUrl, "send_email",
                 Map.<String, Object>of("to", email), dynamicArgs);
+    }
+
+    /** 获取某 tenant 专属的 parse_document 工具（doc-parser 2.1，解析 TXT/MD/PDF/Word 为纯文本） */
+    public ToolCallback parseDocumentTool(long userId, long workId) {
+        return tool(userId, workId, docParserMcpUrl, "parse_document", null, null);
     }
 
     /**

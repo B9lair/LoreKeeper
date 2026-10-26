@@ -1,14 +1,17 @@
 package com.xiaoyu.aiaigent.lore;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xiaoyu.aiaigent.rag.ChunkingService;
 import com.xiaoyu.aiaigent.repository.CharacterRepository;
 import com.xiaoyu.aiaigent.repository.ForeshadowRepository;
+import com.xiaoyu.aiaigent.repository.PendingConflictRepository;
 import com.xiaoyu.aiaigent.repository.WorldSettingRepository;
 import com.xiaoyu.aiaigent.repository.WorldSettingRepository.WorldSetting;
 import jakarta.annotation.Resource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -44,6 +47,8 @@ class ConsistencyReviewServiceIntegrationTest {
 
     private SettingMergeService mergeService;
 
+    private PendingConflictRepository pendingConflictRepository;
+
     private ConsistencyReviewService service;
 
     @BeforeEach
@@ -52,12 +57,14 @@ class ConsistencyReviewServiceIntegrationTest {
         worldSettingRepository = new WorldSettingRepository(jdbcTemplate);
         foreshadowRepository = new ForeshadowRepository(jdbcTemplate);
         characterRepository = new CharacterRepository(jdbcTemplate, objectMapper);
+        pendingConflictRepository = new PendingConflictRepository(jdbcTemplate);
 
         // mock LLM 抽取
         extractor = mock(EntityExtractor.class);
 
-        mergeService = new SettingMergeService(characterRepository, worldSettingRepository);
-        service = new ConsistencyReviewService(extractor, mergeService, worldSettingRepository, foreshadowRepository);
+        mergeService = new SettingMergeService(characterRepository, worldSettingRepository,
+                mock(ChunkingService.class), mock(VectorStore.class));
+        service = new ConsistencyReviewService(extractor, mergeService, worldSettingRepository, foreshadowRepository, pendingConflictRepository);
 
         // 准备隔离数据：users → work → character（外键顺序）
         cleanup();
@@ -81,6 +88,7 @@ class ConsistencyReviewServiceIntegrationTest {
     @AfterEach
     void cleanup() {
         jdbcTemplate.update("DELETE FROM foreshadow WHERE work_id = ?", TEST_WORK_ID);
+        jdbcTemplate.update("DELETE FROM pending_conflict WHERE work_id = ?", TEST_WORK_ID);
         jdbcTemplate.update("DELETE FROM world_setting WHERE work_id = ?", TEST_WORK_ID);
         jdbcTemplate.update("DELETE FROM character WHERE work_id = ?", TEST_WORK_ID);
         jdbcTemplate.update("DELETE FROM work WHERE id = ?", TEST_WORK_ID);
@@ -120,5 +128,13 @@ class ConsistencyReviewServiceIntegrationTest {
 
         // ④ open 伏笔被查出
         assertEquals(List.of("她总觉得这事没那么简单"), report.foreshadowReminders());
+
+        // ⑤ CONFLICT 落待确认队列（B6）
+        List<PendingConflictRepository.PendingConflict> pending =
+                pendingConflictRepository.findByWorkId(TEST_WORK_ID, "pending");
+        assertEquals(1, pending.size(), "CONFLICT 应进入待确认队列");
+        assertEquals("主角", pending.get(0).entity());
+        assertEquals("左撇子", pending.get(0).oldValue());
+        assertEquals("右手", pending.get(0).newValue());
     }
 }
