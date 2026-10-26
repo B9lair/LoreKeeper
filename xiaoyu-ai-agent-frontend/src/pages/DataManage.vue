@@ -469,7 +469,7 @@ watch(
 }
 
 .data-tab.active {
-  background: rgba(68, 147, 248, 0.16);
+  background: var(--accent-tint);
   color: var(--text);
 }
 
@@ -553,7 +553,7 @@ watch(
 
 .conflict-head {
   font-size: 12px;
-  color: #e3b341;
+  color: var(--warn);
   margin-bottom: 6px;
 }
 
@@ -563,16 +563,16 @@ watch(
   padding: 8px 10px;
   margin: 6px 0;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--warn-soft);
   border-left: 2px solid var(--warn);
   white-space: pre-wrap;
 }
 
 .delete-warn {
   padding: 12px 14px;
-  border: 1px solid rgba(248, 81, 73, 0.4);
+  border: 1px solid rgba(198, 47, 47, 0.35);
   border-radius: var(--radius-sm);
-  background: rgba(248, 81, 73, 0.06);
+  background: var(--danger-soft);
   font-size: 13px;
   line-height: 1.7;
 }

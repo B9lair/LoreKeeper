@@ -32,10 +32,6 @@
           <span class="nav-icon" aria-hidden="true">☷</span>数据
         </RouterLink>
       </nav>
-
-      <div class="side-foot">
-        <button type="button" class="nav-item ghost" @click="reset">退出演示</button>
-      </div>
     </aside>
 
     <main class="app-main">
@@ -46,7 +42,6 @@
 
 <script setup>
 import { RouterLink, RouterView } from 'vue-router';
-import { clearAuth } from './api/http';
 import { workStore, refreshWorks, switchTo } from './stores/work';
 
 // 应用挂载即拉取作品列表、定位当前作品
@@ -60,10 +55,5 @@ const onSwitchWork = async (e) => {
   } catch (err) {
     // 切换失败保持现状，不打断用户
   }
-};
-
-const reset = () => {
-  clearAuth();
-  window.location.href = '/';
 };
 </script>

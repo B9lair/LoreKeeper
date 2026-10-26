@@ -5,30 +5,41 @@
 }
 
 :root {
-  /* 专业深色（GitHub Dark / Linear 调性） */
-  --bg: #0d1117;
-  --bg-elevated: #161b22;
-  --bg-inset: #0a0d12;
-  --border: #30363d;
-  --border-strong: #3d444d;
-  --text: #e6edf3;
-  --text-muted: #8b949e;
-  --text-faint: #6e7681;
+  /* 米白极简（off-white / cream）+ 灰黑强调 */
+  --bg: #f7f4ee;
+  --bg-elevated: #ffffff;
+  --bg-inset: #efeae1;
+  --border: #e6e0d5;
+  --border-strong: #d2cabb;
+  --text: #23211d;
+  --text-muted: #6b665b;
+  --text-faint: #a49d90;
 
-  --accent: #4493f8;
-  --accent-2: #2f81f7;
+  --accent: #2b2823;
+  --accent-2: #1b1915;
+  --accent-contrast: #ffffff;
 
-  /* 意图色 */
-  --intent-write: #4493f8;
-  --intent-review: #f0883e;
-  --intent-query: #3fb950;
-  --intent-foreshadow: #a371f7;
-  --intent-chat: #8b949e;
+  /* 中性悬浮 / 选中软底 */
+  --accent-soft: rgba(43, 40, 35, 0.07);
+  --accent-tint: rgba(43, 40, 35, 0.13);
+  --hover: rgba(35, 33, 29, 0.045);
+  --hover-strong: rgba(35, 33, 29, 0.075);
+
+  /* 意图色（浅色模式下用更深饱和色保证对比） */
+  --intent-write: #1a6fd6;
+  --intent-review: #c0581a;
+  --intent-query: #1d8a3c;
+  --intent-foreshadow: #7a3fd0;
+  --intent-chat: #6b665b;
 
   /* 语义色 */
-  --ok: #3fb950;
-  --warn: #d29922;
-  --danger: #f85149;
+  --ok: #1d8a3c;
+  --warn: #b0760a;
+  --danger: #c62f2f;
+
+  --ok-soft: rgba(29, 138, 60, 0.10);
+  --warn-soft: rgba(176, 118, 10, 0.12);
+  --danger-soft: rgba(198, 47, 47, 0.10);
 
   --radius: 10px;
   --radius-sm: 8px;
@@ -80,8 +91,8 @@ body {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--accent), #1f6feb);
-  color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: var(--accent-contrast);
   font-weight: 700;
   font-size: 16px;
   display: grid;
@@ -153,20 +164,12 @@ body {
 
 .nav-item:hover {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover);
 }
 
 .nav-item.router-link-active {
   color: var(--text);
-  background: rgba(68, 147, 248, 0.14);
-}
-
-.nav-item.ghost {
-  color: var(--text-faint);
-}
-
-.nav-item.ghost:hover {
-  color: var(--danger);
+  background: var(--accent-soft);
 }
 
 .nav-icon {
@@ -174,11 +177,6 @@ body {
   text-align: center;
   font-size: 14px;
   opacity: 0.85;
-}
-
-.side-foot {
-  padding: 10px 8px;
-  border-top: 1px solid var(--border);
 }
 
 .app-main {
@@ -249,7 +247,7 @@ body {
 }
 
 .btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hover-strong);
   border-color: var(--text-faint);
 }
 
@@ -261,7 +259,7 @@ body {
 .btn.primary {
   background: var(--accent-2);
   border-color: var(--accent-2);
-  color: #fff;
+  color: var(--accent-contrast);
 }
 
 .btn.primary:hover:not(:disabled) {
@@ -274,9 +272,9 @@ body {
 }
 
 .btn.danger {
-  background: rgba(248, 81, 73, 0.12);
-  border-color: rgba(248, 81, 73, 0.4);
-  color: #ffa198;
+  background: var(--danger-soft);
+  border-color: rgba(198, 47, 47, 0.35);
+  color: var(--danger);
 }
 
 .btn.sm {
@@ -331,7 +329,7 @@ body {
 .textarea:focus,
 .select:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(68, 147, 248, 0.18);
+  box-shadow: 0 0 0 3px rgba(43, 40, 35, 0.12);
 }
 
 /* ============ 表格 ============ */
@@ -355,13 +353,13 @@ body {
 
 .table td {
   padding: 9px 10px;
-  border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+  border-bottom: 1px solid var(--border);
   vertical-align: top;
   color: var(--text);
 }
 
 .table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--hover);
 }
 
 /* ============ chip / badge ============ */
@@ -380,21 +378,21 @@ body {
 }
 
 .chip.ok {
-  border-color: rgba(63, 185, 80, 0.4);
-  color: #7ee787;
-  background: rgba(63, 185, 80, 0.1);
+  border-color: rgba(29, 138, 60, 0.4);
+  color: var(--ok);
+  background: var(--ok-soft);
 }
 
 .chip.warn {
-  border-color: rgba(210, 153, 34, 0.4);
-  color: #e3b341;
-  background: rgba(210, 153, 34, 0.1);
+  border-color: rgba(176, 118, 10, 0.4);
+  color: var(--warn);
+  background: var(--warn-soft);
 }
 
 .chip.danger {
-  border-color: rgba(248, 81, 73, 0.4);
-  color: #ffa198;
-  background: rgba(248, 81, 73, 0.1);
+  border-color: rgba(198, 47, 47, 0.4);
+  color: var(--danger);
+  background: var(--danger-soft);
 }
 
 /* ============ 意图徽章 ============ */
@@ -417,11 +415,11 @@ body {
   background: currentColor;
 }
 
-.intent-write { color: #79c0ff; border-color: rgba(68, 147, 248, 0.4); background: rgba(68, 147, 248, 0.1); }
-.intent-review { color: #ffa657; border-color: rgba(240, 136, 62, 0.4); background: rgba(240, 136, 62, 0.1); }
-.intent-query { color: #7ee787; border-color: rgba(63, 185, 80, 0.4); background: rgba(63, 185, 80, 0.1); }
-.intent-foreshadow { color: #d2a8ff; border-color: rgba(163, 113, 247, 0.4); background: rgba(163, 113, 247, 0.1); }
-.intent-chat { color: var(--text-muted); border-color: var(--border-strong); background: var(--bg-inset); }
+.intent-write { color: var(--intent-write); border-color: rgba(26, 111, 214, 0.35); background: rgba(26, 111, 214, 0.10); }
+.intent-review { color: var(--intent-review); border-color: rgba(192, 88, 26, 0.35); background: rgba(192, 88, 26, 0.10); }
+.intent-query { color: var(--intent-query); border-color: rgba(29, 138, 60, 0.35); background: rgba(29, 138, 60, 0.10); }
+.intent-foreshadow { color: var(--intent-foreshadow); border-color: rgba(122, 63, 208, 0.35); background: rgba(122, 63, 208, 0.10); }
+.intent-chat { color: var(--intent-chat); border-color: var(--border-strong); background: var(--bg-inset); }
 
 /* ============ 工具调用 trace ============ */
 .tool-step {
@@ -465,12 +463,12 @@ body {
   margin-top: 3px;
 }
 
-.tool-step.kind-mcp .t-icon { background: rgba(163, 113, 247, 0.15); color: #d2a8ff; }
-.tool-step.kind-mcp .t-name { color: #d2a8ff; }
-.tool-step.kind-rag .t-icon { background: rgba(68, 147, 248, 0.15); color: #79c0ff; }
-.tool-step.kind-rag .t-name { color: #79c0ff; }
+.tool-step.kind-mcp .t-icon { background: rgba(122, 63, 208, 0.12); color: #6a2fc0; }
+.tool-step.kind-mcp .t-name { color: #6a2fc0; }
+.tool-step.kind-rag .t-icon { background: rgba(26, 111, 214, 0.12); color: var(--intent-write); }
+.tool-step.kind-rag .t-name { color: var(--intent-write); }
 .tool-step.kind-end { opacity: 0.55; }
-.tool-step.kind-end .t-icon { background: rgba(139, 148, 158, 0.15); color: var(--text-muted); }
+.tool-step.kind-end .t-icon { background: var(--hover); color: var(--text-muted); }
 
 /* ============ 空态 / 提示 / 错误 ============ */
 .empty {
@@ -489,18 +487,18 @@ body {
 .error-box {
   padding: 10px 12px;
   border-radius: var(--radius-sm);
-  background: rgba(248, 81, 73, 0.1);
-  border: 1px solid rgba(248, 81, 73, 0.35);
-  color: #ffa198;
+  background: var(--danger-soft);
+  border: 1px solid rgba(198, 47, 47, 0.35);
+  color: var(--danger);
   font-size: 13px;
 }
 
 .success-box {
   padding: 10px 12px;
   border-radius: var(--radius-sm);
-  background: rgba(63, 185, 80, 0.1);
-  border: 1px solid rgba(63, 185, 80, 0.35);
-  color: #7ee787;
+  background: var(--ok-soft);
+  border: 1px solid rgba(29, 138, 60, 0.35);
+  color: var(--ok);
   font-size: 13px;
 }
 

@@ -236,7 +236,7 @@ const handleReview = async () => {
 
 .file-del:hover {
   color: var(--danger);
-  background: rgba(248, 81, 73, 0.14);
+  background: var(--danger-soft);
 }
 
 .divider {

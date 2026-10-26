@@ -361,7 +361,7 @@ watch(() => workStore.version, () => {
 }
 
 .kb-tab.active {
-  background: rgba(68, 147, 248, 0.14);
+  background: var(--accent-soft);
   color: var(--text);
 }
 
@@ -387,11 +387,11 @@ watch(() => workStore.version, () => {
 }
 
 .kb-item:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--hover);
 }
 
 .kb-item.active {
-  background: rgba(68, 147, 248, 0.14);
+  background: var(--accent-soft);
   color: var(--text);
 }
 
@@ -425,11 +425,11 @@ watch(() => workStore.version, () => {
 }
 
 .chunk-card.chunk-setting {
-  border-color: rgba(163, 113, 247, 0.35);
+  border-color: rgba(122, 63, 208, 0.35);
 }
 
 .chunk-card.chunk-foreshadow {
-  border-color: rgba(240, 136, 62, 0.35);
+  border-color: rgba(192, 88, 26, 0.35);
 }
 
 .chunk-head {
@@ -549,7 +549,7 @@ watch(() => workStore.version, () => {
 
 .file-del:hover {
   color: var(--danger);
-  background: rgba(248, 81, 73, 0.14);
+  background: var(--danger-soft);
 }
 
 .divider {
@@ -587,14 +587,14 @@ watch(() => workStore.version, () => {
 
 .kb-item-del:hover {
   color: var(--danger);
-  background: rgba(248, 81, 73, 0.14);
+  background: var(--danger-soft);
 }
 
 .delete-warn {
   padding: 12px 14px;
-  border: 1px solid rgba(248, 81, 73, 0.4);
+  border: 1px solid rgba(198, 47, 47, 0.35);
   border-radius: var(--radius-sm);
-  background: rgba(248, 81, 73, 0.06);
+  background: var(--danger-soft);
   font-size: 13px;
   line-height: 1.7;
 }

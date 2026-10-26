@@ -58,8 +58,6 @@
                 {{ msg.showTools ? '▾' : '▸' }} Agent 过程（{{ msg.tools.length }} 步）
               </div>
             </div>
-
-            <div v-if="msg.role === 'user'" class="avatar user">我</div>
           </div>
         </div>
 
@@ -70,7 +68,7 @@
         <textarea
           v-model="input"
           class="input"
-          rows="3"
+          rows="2"
           placeholder="输入剧情或问题，Enter 发送、Shift+Enter 换行"
           @keydown.enter.exact.prevent="handleSubmit"
         />
@@ -406,7 +404,7 @@ onBeforeUnmount(() => {
 
 .conv-item.active {
   border-color: var(--accent);
-  background: rgba(68, 147, 248, 0.12);
+  background: var(--accent-soft);
 }
 
 .conv-title {
@@ -445,8 +443,8 @@ onBeforeUnmount(() => {
 }
 
 .conv-del:hover {
-  color: #ffa198;
-  background: var(--bg-elevated);
+  color: var(--danger);
+  background: var(--bg-inset);
 }
 
 .chat-main {
@@ -487,20 +485,13 @@ onBeforeUnmount(() => {
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--accent), #1f6feb);
-  color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: var(--accent-contrast);
   font-size: 13px;
   font-weight: 700;
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-}
-
-.avatar.user {
-  background: var(--bg-inset);
-  border: 1px solid var(--border-strong);
-  color: var(--text-muted);
-  font-size: 11px;
 }
 
 .bubble {
@@ -512,8 +503,8 @@ onBeforeUnmount(() => {
 }
 
 .chat-message.from-user .bubble {
-  background: rgba(68, 147, 248, 0.12);
-  border-color: rgba(68, 147, 248, 0.3);
+  background: var(--accent-soft);
+  border-color: var(--border-strong);
 }
 
 .bubble-head {
@@ -541,7 +532,7 @@ onBeforeUnmount(() => {
 }
 
 .content.err {
-  color: #ffa198;
+  color: var(--danger);
 }
 
 .trace-toggle {
@@ -569,17 +560,22 @@ onBeforeUnmount(() => {
   padding: 10px 12px;
   display: flex;
   gap: 8px;
-  align-items: flex-end;
+  align-items: stretch;
 }
 
 .chat-input-bar .input {
   flex: 1;
+  resize: none;
 }
 
 .input-actions {
   display: flex;
   gap: 6px;
   flex-direction: column;
+}
+
+.input-actions .btn {
+  flex: 1;
 }
 
 .inspector {
