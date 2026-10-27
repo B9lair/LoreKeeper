@@ -155,7 +155,7 @@ function parseToolEvent(data) {
 }
 
 function kindOf(name) {
-  if (['parse_document', 'query_database', 'send_email'].includes(name)) return 'mcp';
+  if (['parse_document', 'query_database'].includes(name)) return 'mcp';
   if (name === 'settingSearch') return 'rag';
   if (name === 'doTerminate') return 'end';
   return 'note';

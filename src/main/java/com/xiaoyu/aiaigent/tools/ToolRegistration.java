@@ -41,7 +41,7 @@ public class ToolRegistration {
                 new TerminateTool());
     }
 
-    /** 场景4 伏笔追踪：queryDatabase(3.1)/sendEmail(3.2) 尚未实现，先只有 Terminate 占位 */
+    /** 场景4 伏笔追踪：queryDatabase(3.1) 由 MCP 池注入，这里只有 Terminate 占位 */
     @Bean
     public ToolCallback[] foreshadowTools() {
         return ToolCallbacks.from(new TerminateTool());

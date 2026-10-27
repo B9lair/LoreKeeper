@@ -120,12 +120,57 @@
         <div v-else class="empty">暂无未回收伏笔。</div>
       </div>
     </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <span class="panel-title">待确认队列</span>
+        <span class="panel-sub">{{ pendings.length }} 条</span>
+      </div>
+      <div class="panel-body">
+        <div class="hint" style="margin-bottom: 10px">
+          一致性审查检出的 CONFLICT 会进此队列；采纳用新值更新设定，驳回保留旧值。
+        </div>
+        <table v-if="pendings.length" class="table">
+          <thead>
+            <tr>
+              <th>实体</th>
+              <th>属性</th>
+              <th>旧值</th>
+              <th>新值</th>
+              <th>出处</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="p in pendings" :key="p.id">
+              <td>{{ p.entity }}</td>
+              <td>{{ p.attribute }}</td>
+              <td>{{ p.oldValue || '-' }}</td>
+              <td>{{ p.newValue }}</td>
+              <td class="mono">ch#{{ p.chapterNo || '-' }}</td>
+              <td class="row-actions">
+                <button type="button" class="btn sm primary" @click="handleAccept(p.id)">采纳</button>
+                <button type="button" class="btn sm" @click="handleReject(p.id)">驳回</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-else class="empty">暂无待确认</div>
+      </div>
+    </section>
   </div>
 </template>
 
 <script setup>
-import { ref } from "vue";
-import { reviewChapter, reviewFile } from "../api/review";
+import { ref, watch } from "vue";
+import {
+  reviewChapter,
+  reviewFile,
+  listPending,
+  acceptPending,
+  rejectPending
+} from "../api/review";
+import { workStore } from "../stores/work";
 
 const file = ref(null);
 const chapterNo = ref("");
@@ -133,6 +178,9 @@ const chapterText = ref("");
 const reviewing = ref(false);
 const error = ref("");
 const report = ref(null);
+
+// 待确认队列（一致性审查检出的 CONFLICT，需人工采纳/驳回）
+const pendings = ref([]);
 
 const onFile = (e) => {
   const f = e.target.files && e.target.files[0];
@@ -162,6 +210,8 @@ const handleReview = async () => {
     } else {
       report.value = await reviewChapter(no, chapterText.value.trim());
     }
+    // 审查可能新增 CONFLICT 进待确认队列，完成后刷新
+    loadPendings();
   } catch (e) {
     error.value =
       "审查失败：" + (e.response?.data?.message || e.message || "未知错误");
@@ -169,6 +219,38 @@ const handleReview = async () => {
     reviewing.value = false;
   }
 };
+
+const loadPendings = async () => {
+  pendings.value = await listPending();
+};
+
+const handleAccept = async (id) => {
+  try {
+    await acceptPending(id);
+  } catch (e) {
+    // 409 幂等：已处理，刷新即可
+  }
+  loadPendings();
+};
+
+const handleReject = async (id) => {
+  try {
+    await rejectPending(id);
+  } catch (e) {
+    // 409 幂等
+  }
+  loadPendings();
+};
+
+// 切换作品时重拉待确认队列；immediate 等价于首次挂载加载
+watch(
+  () => workStore.version,
+  () => {
+    pendings.value = [];
+    loadPendings();
+  },
+  { immediate: true }
+);
 </script>
 
 <style scoped>
@@ -271,5 +353,14 @@ const handleReview = async () => {
   color: var(--text);
   font-size: 13px;
   line-height: 1.6;
+}
+
+.row-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.row-actions .btn {
+  margin-left: 4px;
 }
 </style>

@@ -64,7 +64,7 @@
       </div>
 
       <!-- 伏笔 -->
-      <div v-else-if="tab === 'foreshadow'" class="panel-body">
+      <div v-else class="panel-body">
         <div class="form-row">
           <input v-model="fContent" class="input" placeholder="伏笔内容" />
           <input v-model="fChapter" class="input" placeholder="埋设章节（可选）" style="max-width: 130px" />
@@ -83,28 +83,6 @@
               </td>
             </tr>
             <tr v-if="foreshadows.length === 0"><td colspan="4" class="empty">暂无伏笔</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- 待确认 -->
-      <div v-else class="panel-body">
-        <div class="hint" style="margin-bottom: 10px">一致性审查检出的 CONFLICT 会进此队列；采纳用新值更新设定，驳回保留旧值。</div>
-        <table class="table">
-          <thead><tr><th>实体</th><th>属性</th><th>旧值</th><th>新值</th><th>出处</th><th></th></tr></thead>
-          <tbody>
-            <tr v-for="p in pendings" :key="p.id">
-              <td>{{ p.entity }}</td>
-              <td>{{ p.attribute }}</td>
-              <td>{{ p.oldValue || '-' }}</td>
-              <td>{{ p.newValue }}</td>
-              <td>ch#{{ p.chapterNo || '-' }}</td>
-              <td class="row-actions">
-                <button type="button" class="btn sm primary" @click="handleAccept(p.id)">采纳</button>
-                <button type="button" class="btn sm" @click="handleReject(p.id)">驳回</button>
-              </td>
-            </tr>
-            <tr v-if="pendings.length === 0"><td colspan="6" class="empty">暂无待确认</td></tr>
           </tbody>
         </table>
       </div>
@@ -188,15 +166,13 @@
 import { ref, watch } from 'vue';
 import { listSettings, saveSetting, deleteSetting } from '../api/setting';
 import { listForeshadows, createForeshadow, resolveForeshadow, deleteForeshadow } from '../api/foreshadow';
-import { listPending, acceptPending, rejectPending } from '../api/review';
 import { workStore, refreshWorks, switchTo, createAndSwitch, removeWork } from '../stores/work';
 import { updateWork } from '../api/work';
 
 const tabs = [
   { key: 'work', label: '作品' },
   { key: 'setting', label: '设定' },
-  { key: 'foreshadow', label: '伏笔' },
-  { key: 'pending', label: '待确认' }
+  { key: 'foreshadow', label: '伏笔' }
 ];
 
 const tab = ref('work');
@@ -219,15 +195,11 @@ const foreshadows = ref([]);
 const fContent = ref('');
 const fChapter = ref('');
 
-// 待确认
-const pendings = ref([]);
-
 const switchTab = (t) => {
   tab.value = t;
   if (t === 'work') loadWorks();
   else if (t === 'setting') loadSettings();
   else if (t === 'foreshadow') loadForeshadows();
-  else loadPendings();
 };
 
 const loadWorks = async () => {
@@ -240,10 +212,6 @@ const loadSettings = async () => {
 
 const loadForeshadows = async () => {
   foreshadows.value = await listForeshadows();
-};
-
-const loadPendings = async () => {
-  pendings.value = await listPending();
 };
 
 const handleCreateWork = async () => {
@@ -305,24 +273,6 @@ const handleCreateForeshadow = async () => {
 const handleResolve = async (id) => {
   await resolveForeshadow(id, null);
   loadForeshadows();
-};
-
-const handleAccept = async (id) => {
-  try {
-    await acceptPending(id);
-  } catch (e) {
-    // 409 幂等：已处理，刷新即可
-  }
-  loadPendings();
-};
-
-const handleReject = async (id) => {
-  try {
-    await rejectPending(id);
-  } catch (e) {
-    // 409 幂等
-  }
-  loadPendings();
 };
 
 // 通用删除确认弹窗
@@ -417,11 +367,9 @@ watch(
   () => {
     settings.value = [];
     foreshadows.value = [];
-    pendings.value = [];
     loadWorks();
     if (tab.value === 'setting') loadSettings();
     else if (tab.value === 'foreshadow') loadForeshadows();
-    else if (tab.value === 'pending') loadPendings();
   },
   { immediate: true }
 );

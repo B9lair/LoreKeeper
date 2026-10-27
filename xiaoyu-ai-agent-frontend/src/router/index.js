@@ -27,7 +27,7 @@ const routes = [
     component: () => import('../pages/Review.vue'),
     meta: {
       title: '审查｜LoreKeeper 设定守护者',
-      description: '一致性审查：上传章节，逐条比对设定，输出矛盾清单。'
+      description: '一致性审查：上传章节，逐条比对设定，输出矛盾清单，并处理待确认冲突。'
     }
   },
   {
@@ -45,7 +45,7 @@ const routes = [
     component: () => import('../pages/DataManage.vue'),
     meta: {
       title: '数据｜LoreKeeper 设定守护者',
-      description: '作品 / 设定 / 伏笔 / 待确认队列管理。'
+      description: '作品 / 设定 / 伏笔管理。'
     }
   }
 ];

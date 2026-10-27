@@ -4,7 +4,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.xiaoyu.aiaigent.repository.ForeshadowRepository;
 import com.xiaoyu.aiaigent.security.JwtService;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
@@ -26,11 +25,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Supplier;
 
 /**
- * 自研 MCP 客户端连接池（database 3.1 / notify 3.2）。
+ * 自研 MCP 客户端连接池（database 3.1 / doc-parser 2.1）。
  *
  * 无状态 MCP + 连接级 JWT：每个 workId 一条带 {@code Authorization: Bearer <JWT>} 的连接。
- * 工具调用时由 {@link BoundedMcpToolCallback} 把可信键值（workId / 收件人邮箱）强制注入 arguments，
- * 服务端据此过滤/定收件人，模型只能决定业务字段，无法伪造隔离键（2.7 / 4.3）。
+ * 工具调用时由 {@link BoundedMcpToolCallback} 把可信键值（workId）强制注入 arguments，
+ * 服务端据此过滤，模型只能决定业务字段，无法伪造隔离键（2.7 / 4.3）。
  */
 @Component
 public class McpClientPool {
@@ -39,11 +38,7 @@ public class McpClientPool {
 
     private final JwtService jwtService;
 
-    private final ForeshadowRepository foreshadowRepository;
-
     private final String databaseMcpUrl;
-
-    private final String notifyMcpUrl;
 
     private final String docParserMcpUrl;
 
@@ -56,16 +51,12 @@ public class McpClientPool {
     private final Map<Long, List<McpSyncClient>> clients = new ConcurrentHashMap<>();
 
     public McpClientPool(JwtService jwtService,
-                         ForeshadowRepository foreshadowRepository,
                          ObjectMapper objectMapper,
                          @Value("${lorekeeper.mcp.database-url:http://localhost:8125}") String databaseMcpUrl,
-                         @Value("${lorekeeper.mcp.notify-url:http://localhost:8126}") String notifyMcpUrl,
                          @Value("${lorekeeper.mcp.doc-parser-url:http://localhost:8124}") String docParserMcpUrl) {
         this.jwtService = jwtService;
-        this.foreshadowRepository = foreshadowRepository;
         this.objectMapper = objectMapper;
         this.databaseMcpUrl = databaseMcpUrl;
-        this.notifyMcpUrl = notifyMcpUrl;
         this.docParserMcpUrl = docParserMcpUrl;
     }
 
@@ -73,16 +64,6 @@ public class McpClientPool {
     public ToolCallback queryDatabaseTool(long userId, long workId) {
         return tool(userId, workId, databaseMcpUrl, "query_database",
                 Map.<String, Object>of("workId", workId), null);
-    }
-
-    /** 获取某 tenant 专属的 send_email 工具：收件人静态注入，正文动态注入（真实伏笔清单，3.2） */
-    public ToolCallback sendEmailTool(long userId, long workId, String email) {
-        // 静态注入 to；动态注入 subject/body（查真实 open 伏笔拼正文，从 LLM 手中收回，杜绝编造）
-        Supplier<Map<String, Object>> dynamicArgs = () -> Map.of(
-                "subject", "连载更新提醒",
-                "body", buildForeshadowReminderBody(workId));
-        return tool(userId, workId, notifyMcpUrl, "send_email",
-                Map.<String, Object>of("to", email), dynamicArgs);
     }
 
     /** 获取某 tenant 专属的 parse_document 工具（doc-parser 2.1，解析 TXT/MD/PDF/Word 为纯文本） */
@@ -222,20 +203,6 @@ public class McpClientPool {
             .filter(t -> toolName.equals(t.name()))
             .findFirst()
             .orElse(null);
-    }
-
-    /** 拼装伏笔提醒正文：用代码查真实 open 伏笔生成，不从 LLM 转述（事实性内容交给代码） */
-    private String buildForeshadowReminderBody(long workId) {
-        List<String> contents = foreshadowRepository.findOpenContentsByWorkId(workId);
-        if (contents.isEmpty()) {
-            return "您当前没有未回收的伏笔。";
-        }
-        StringBuilder sb = new StringBuilder("您有以下伏笔待回收：\n\n");
-        for (int i = 0; i < contents.size(); i++) {
-            sb.append(i + 1).append(". ").append(contents.get(i)).append("\n");
-        }
-        sb.append("\n请尽快处理。");
-        return sb.toString();
     }
 
     @PreDestroy

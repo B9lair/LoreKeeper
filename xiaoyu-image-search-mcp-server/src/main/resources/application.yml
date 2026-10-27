@@ -1,7 +1,0 @@
-spring:
-  application:
-    name: xiaoyu-image-search-mcp-server
-  profiles:
-    active: sse
-server:
-  port: 8123

@@ -50,7 +50,6 @@ lorekeeper:
   mcp:
     doc-parser-url: http://localhost:8124
     database-url: http://localhost:8125
-    notify-url: http://localhost:8126
 
 rag:
   rerank:

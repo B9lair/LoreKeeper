@@ -11,7 +11,6 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.memory.ChatMemory;
-import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -133,13 +132,13 @@ public abstract class BaseAgent {
 
                 // 基础校验（不可执行）
                 if(this.state != AgentState.IDLE){
-                    emitter.send(SseEmitter.event().name("error").data("错误：无法从状态运行代理" + this.state));
+                    safeSend(emitter, "error", "错误：无法从状态运行代理" + this.state);
                     emitter.complete();
                     return;
 
                 }
                 if(StringUtil.isBlank(userPrompt)){
-                    emitter.send(SseEmitter.event().name("error").data("错误：不能使用空提示词运行代理"));
+                    safeSend(emitter, "error", "错误：不能使用空提示词运行代理");
                     emitter.complete();
                     return;
                 }
@@ -151,7 +150,7 @@ public abstract class BaseAgent {
 
                 // 发送意图事件（命名事件 intent，前端据此渲染意图徽章；未设置则跳过）
                 if (!StringUtil.isBlank(intent)) {
-                    emitter.send(SseEmitter.event().name("intent").data(intent));
+                    if (!safeSend(emitter, "intent", intent)) return;
                 }
 
                 // 执行循环
@@ -166,38 +165,35 @@ public abstract class BaseAgent {
                         String result = "Step " + stepNumber + ": " + stepResult;
 
                         // 发送每一步的结果（命名事件 tool，前端据此渲染"过程区"）
-                        emitter.send(SseEmitter.event().name("tool").data(result));
+                        if (!safeSend(emitter, "tool", result)) {
+                            state = AgentState.FINISHED;
+                            break;
+                        }
 
                     }
                     // 检查是否超出步骤限制
-                    if(currentStep >= maxSteps){
+                    if(currentStep >= maxSteps && state != AgentState.FINISHED){
                         state = AgentState.FINISHED;
-                        emitter.send(SseEmitter.event().name("tool").data("执行结束：达到最大步骤(" + maxSteps + ")"));
+                        safeSend(emitter, "tool", "执行结束：达到最大步骤(" + maxSteps + ")");
                     }
 
                     // 发送最终回答（命名事件 answer，前端据此渲染"答案区"）
                     if(!StringUtil.isBlank(lastAnswer)){
-                        emitter.send(SseEmitter.event().name("answer").data(lastAnswer));
+                        safeSend(emitter, "answer", lastAnswer);
                     }
 
                     // 正常完成
                     emitter.complete();
 
                 } catch (Exception e) {
-                    if (isClientDisconnected(e)) {
-                        // 客户端主动断开（切会话 / 停止 / 刷新）是正常现象，静默处理，不刷 ERROR 日志
-                        state = AgentState.FINISHED;
-                        log.info("SSE 连接已由客户端断开，停止输出（conversationId={}）", conversationId);
-                    } else {
-                        state = AgentState.ERROR;
-                        log.error("执行智能体失败", e);
+                    state = AgentState.ERROR;
+                    log.error("执行智能体失败", e);
 
-                        try {
-                            emitter.send(SseEmitter.event().name("error").data("执行错误：" + e.getMessage()));
-                            emitter.complete();
-                        } catch (Exception ex) {
-                            emitter.completeWithError(ex);
-                        }
+                    try {
+                        emitter.send(SseEmitter.event().name("error").data("执行错误：" + e.getMessage()));
+                        emitter.complete();
+                    } catch (Exception ex) {
+                        emitter.completeWithError(ex);
                     }
 
                 } finally {
@@ -226,7 +222,7 @@ public abstract class BaseAgent {
                 this.state = AgentState.FINISHED;
             }
             this.cleanup();
-            log.warn("SSE connection completed");
+            log.info("SSE connection completed");
         });
 
         return emitter;
@@ -277,24 +273,19 @@ public abstract class BaseAgent {
     }
 
     /**
-     * 判断异常是否由「客户端主动断开 SSE 连接」引起（切会话/停止/刷新）。
-     * 这种情况是正常交互，不应按系统错误处理。
+     * SSE 安全发送：在 send 调用处就地拦截 IOException（客户端断连），
+     * 阻止异常传播到 Spring DispatcherServlet 触发 ERROR 日志。
+     *
+     * @return true 发送成功，false 客户端已断连（调用方应停止后续发送）
      */
-    private boolean isClientDisconnected(Throwable t) {
-        Throwable cur = t;
-        while (cur != null) {
-            if (cur instanceof AsyncRequestNotUsableException) {
-                return true;
-            }
-            String msg = cur.getMessage();
-            if (msg != null && (msg.contains("中止了一个已建立的连接")
-                    || msg.contains("broken pipe")
-                    || msg.contains("Connection reset"))) {
-                return true;
-            }
-            cur = cur.getCause();
+    private boolean safeSend(SseEmitter emitter, String eventName, String data) {
+        try {
+            emitter.send(SseEmitter.event().name(eventName).data(data));
+            return true;
+        } catch (IOException e) {
+            log.info("SSE 连接已由客户端断开（发送 {} 时），停止输出（conversationId={}）", eventName, conversationId);
+            return false;
         }
-        return false;
     }
 
 }

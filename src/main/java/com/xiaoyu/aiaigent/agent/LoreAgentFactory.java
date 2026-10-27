@@ -3,7 +3,6 @@ package com.xiaoyu.aiaigent.agent;
 import com.xiaoyu.aiaigent.advisor.MyLoggerAdvisor;
 import com.xiaoyu.aiaigent.common.TenantContext;
 import com.xiaoyu.aiaigent.mcp.McpClientPool;
-import com.xiaoyu.aiaigent.repository.UserRepository;
 import com.xiaoyu.aiaigent.rag.HybridSearchService;
 import com.xiaoyu.aiaigent.tools.SettingSearchTool;
 import org.springframework.ai.chat.client.ChatClient;
@@ -30,8 +29,6 @@ public class LoreAgentFactory {
 
     private final McpClientPool mcpClientPool;
 
-    private final UserRepository userRepository;
-
     private final ChatMemory chatMemory;
 
     private final ToolCallback[] writeTools;
@@ -42,7 +39,6 @@ public class LoreAgentFactory {
     public LoreAgentFactory(ChatModel dashscopeChatModel,
                             HybridSearchService hybridSearchService,
                             McpClientPool mcpClientPool,
-                            UserRepository userRepository,
                             ChatMemory chatMemory,
                             ToolCallback[] writeTools,
                             ToolCallback[] reviewTools,
@@ -51,7 +47,6 @@ public class LoreAgentFactory {
         this.chatModel = dashscopeChatModel;
         this.hybridSearchService = hybridSearchService;
         this.mcpClientPool = mcpClientPool;
-        this.userRepository = userRepository;
         this.chatMemory = chatMemory;
         this.writeTools = writeTools;
         this.reviewTools = reviewTools;
@@ -72,13 +67,6 @@ public class LoreAgentFactory {
                 new SettingSearchTool(hybridSearchService, workId, settingTypes(intent), preferredTypes(intent, querySubType)))[0];
         // database MCP：每 workId 一条带 JWT 的连接（连接级鉴权），从池取 query_database（3.1）
         ToolCallback queryDatabase = mcpClientPool.queryDatabaseTool(tenant.userId(), workId);
-        // notify MCP（3.2）：收件人 = 当前登录用户邮箱，服务端从 userId 查，模型不可填
-        String email = userRepository.findById(tenant.userId())
-                .map(UserRepository.User::email)
-                .orElse(null);
-        ToolCallback sendEmail = email == null
-                ? null
-                : mcpClientPool.sendEmailTool(tenant.userId(), workId, email);
         // doc-parser（2.1）：解析 TXT/MD/PDF/Word 为纯文本，REVIEW 工作流按需调用（懒连接，失败降级为 null）
         ToolCallback parseDocument = mcpClientPool.parseDocumentTool(tenant.userId(), workId);
 
@@ -86,8 +74,8 @@ public class LoreAgentFactory {
             case WRITE       -> newAgent("设定提示", WRITE_SOP, merge(settingSearch, writeTools));
             case REVIEW      -> newAgent("一致性审查", REVIEW_SOP, merge(settingSearch, reviewTools, parseDocument));
             case QUERY       -> newAgent("世界观问答", QUERY_SOP, merge(settingSearch, queryTools, queryDatabase));
-            case FORESHADOW  -> newAgent("伏笔追踪", FORESHADOW_SOP, merge(settingSearch, foreshadowTools, queryDatabase, sendEmail));
-            default          -> newAgent("通用", CHAT_SOP, merge(settingSearch, queryTools, queryDatabase, sendEmail));
+            case FORESHADOW  -> newAgent("伏笔追踪", FORESHADOW_SOP, merge(settingSearch, foreshadowTools, queryDatabase));
+            default          -> newAgent("通用", CHAT_SOP, merge(settingSearch, queryTools, queryDatabase));
         };
         // 绑定会话记忆：conversationId 用于多轮记忆隔离（为空则不启用）
         agent.setConversationId(conversationId);
@@ -153,12 +141,11 @@ public class LoreAgentFactory {
         同一个 query 只检索一次，禁止重复检索；无论检索结果是否理想，都必须基于已有结果如实回答，回答后立即调用 doTerminate 结束。""";
 
     static final String FORESHADOW_SOP = """
-        你是「伏笔追踪」工作流，负责查询未回收伏笔并邮件提醒作者。
-        必须按顺序执行，不可跳过、不可在发邮件前提前结束：
+        你是「伏笔追踪」工作流，负责查询并汇总未回收伏笔。
+        必须按顺序执行，不可跳过：
         ① 调 queryDatabase 查询未回收伏笔（table=foreshadow，conditions=status=open）；
-        ② 汇总未回收伏笔清单；
-        ③ 调 sendEmail 发送邮件提醒（收件人、主题、正文均由系统自动生成，无需填写）；
-        ④ 完成上述三步后，再调 doTerminate 结束。""";
+        ② 汇总未回收伏笔清单并输出；
+        ③ 输出清单后，再调 doTerminate 结束。""";
 
     static final String CHAT_SOP = """
         你是 LoreKeeper，面向网文作者的创作设定管家，回答创作相关问题。""";
