@@ -1,6 +1,11 @@
 ### CUSTOM ###
 application-local.yml
 application-prod.yml
+# MCP Server 真实配置（含数据库密码），提交同目录 application.yaml.example 模板代替
+lore-database-mcp-server/src/main/resources/application.yaml
+# 对话记忆（Kryo 落盘，含用户对话内容，属运行时产物）
+chat-memory/
+*.kryo
 node_modules/
 dist/
 tmp

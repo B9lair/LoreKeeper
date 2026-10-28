@@ -1,11 +1,24 @@
-# 模板文件：复制本文件为 application-prod.yml，并将 ${...} 替换为真实值（或通过环境变量注入）
+# ============================================================
+# 生产环境配置模板（可安全提交，不含任何真实密钥）
+#
+# 用法：复制为 application-prod.yml，再填入真实值；
+#      生产环境强烈建议全部通过环境变量注入，不要在文件内写明文。
+#
+#   cp src/main/resources/application-prod.yml.example \
+#      src/main/resources/application-prod.yml
+#
+# application-prod.yml 已被 .gitignore 排除，不会被提交。
+# ============================================================
+
 spring:
   application:
     name: ai-aigent
+
   datasource:
-    url: jdbc:postgresql://pgm-7xvmj349r98bs2giho.rwlb.cn-guangzhou.rds.aliyuncs.com:5432/LoreKeeper_DB
-    username: wxy
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:LoreKeeper_DB}
+    username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
+
   ai:
     dashscope:
       api-key: ${DASHSCOPE_API_KEY}
@@ -13,6 +26,24 @@ spring:
         options:
           model: qwen-plus
 
-# searchApi
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
+
 search-api:
   api-key: ${SEARCH_API_KEY}
+
+lorekeeper:
+  jwt:
+    # 生产环境务必通过 LOREKEEPER_JWT_SECRET 注入强随机值，且三端一致
+    secret: ${LOREKEEPER_JWT_SECRET}
+    expire-ms: 604800000
+  chat-memory-dir: ${user.dir}/chat-memory
+  mcp:
+    doc-parser-url: http://localhost:8124
+    database-url: http://localhost:8125
+
+rag:
+  rerank:
+    enabled: true

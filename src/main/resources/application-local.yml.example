@@ -1,11 +1,28 @@
-# 模板文件：复制本文件为 application-local.yml，并将 ${...} 替换为真实值（或通过环境变量注入）
+# ============================================================
+# 本地开发环境配置模板（可安全提交，不含任何真实密钥）
+#
+# 用法：复制为 application-local.yml，再填入真实值；
+#      或保持 ${...} 形式，通过环境变量 / 启动参数注入。
+#
+#   cp src/main/resources/application-local.yml.example \
+#      src/main/resources/application-local.yml
+#
+# application-local.yml 已被 .gitignore 排除，不会被提交。
+# ============================================================
+
 spring:
   application:
     name: ai-aigent
+
+  # ---------- 数据库（PostgreSQL + pgvector）----------
   datasource:
-    url: jdbc:postgresql://pgm-7xvmj349r98bs2giho.rwlb.cn-guangzhou.rds.aliyuncs.com:5432/LoreKeeper_DB
-    username: wxy
+    # 注意：本地/云 RDS 若未开启 SSL，必须加 ?sslmode=disable，
+    # 否则会报「服务器不支援 SSL 连线」导致连库失败。
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:LoreKeeper_DB}?sslmode=disable
+    username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
+
+  # ---------- 大模型（DashScope / 通义千问）----------
   ai:
     dashscope:
       api-key: ${DASHSCOPE_API_KEY}
@@ -13,6 +30,30 @@ spring:
         options:
           model: qwen-max
 
-# searchApi
+  servlet:
+    multipart:
+      # 章节上传（PDF/Word）需要放宽，默认 1MB 会 413
+      max-file-size: 20MB
+      max-request-size: 20MB
+
+# ---------- 联网搜索（WebSearchTool，可选）----------
 search-api:
   api-key: ${SEARCH_API_KEY}
+
+# ---------- 自研配置 ----------
+lorekeeper:
+  jwt:
+    # 必须与两个 MCP Server 完全一致，否则 MCP 侧校验 JWT 会 401
+    secret: ${LOREKEEPER_JWT_SECRET:LoreKeeper-Dev-Secret-Key-2026}
+    expire-ms: 604800000   # 7 天
+  # 对话记忆（FileBasedChatMemory，Kryo）落盘目录
+  chat-memory-dir: ${user.dir}/chat-memory
+  mcp:
+    # MCP Server 地址；未启动时懒连接失败会降级，不影响主应用启动
+    doc-parser-url: http://localhost:8124
+    database-url: http://localhost:8125
+
+rag:
+  rerank:
+    # DashScope gte-rerank-v2 重排；关闭则降级为 RRF 融合结果
+    enabled: true

@@ -1,0 +1,32 @@
+# ============================================================
+# lore-database-mcp-server 配置模板（可安全提交，不含任何真实密钥）
+#
+# 用法：复制为 application.yaml，再填入真实值：
+#
+#   cp src/main/resources/application.yaml.example \
+#      src/main/resources/application.yaml
+#
+# application.yaml 已被 .gitignore 排除，不会被提交。
+#
+# 与主项目共用同一个 PostgreSQL（含 pgvector）实例。
+# ============================================================
+
+spring:
+  application:
+    name: lore-database-mcp-server
+
+  datasource:
+    # 该 server 独立进程连接数据库，按实例要求决定是否带 sslmode
+    # （阿里云 RDS 通常需 sslmode=require）
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:LoreKeeper_DB}?sslmode=require
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+server:
+  port: 8125
+
+# 与主项目共用同一 JWT secret：主项目用该 secret 签发，本服务用其验签。
+# 三端（主项目 / database MCP / doc-parser MCP）必须一致，否则 MCP 调用会 401。
+lorekeeper:
+  jwt:
+    secret: ${LOREKEEPER_JWT_SECRET:LoreKeeper-Dev-Secret-Key-2026}
