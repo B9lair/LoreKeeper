@@ -22,15 +22,6 @@ const routes = [
     }
   },
   {
-    path: '/review',
-    name: 'review',
-    component: () => import('../pages/Review.vue'),
-    meta: {
-      title: '审查｜LoreKeeper 设定守护者',
-      description: '一致性审查：上传章节，逐条比对设定，输出矛盾清单，并处理待确认冲突。'
-    }
-  },
-  {
     path: '/test',
     name: 'test',
     component: () => import('../pages/TestLab.vue'),

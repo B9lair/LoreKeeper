@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.List;
 import java.util.Optional;
@@ -22,7 +23,7 @@ class SettingMergeServiceTest {
     private final WorldSettingRepository worldSettingRepository = mock(WorldSettingRepository.class);
     private final SettingMergeService service =
             new SettingMergeService(characterRepository, worldSettingRepository,
-                    mock(ChunkingService.class), mock(VectorStore.class));
+                    mock(ChunkingService.class), mock(VectorStore.class), mock(JdbcTemplate.class));
 
     /** save 返回带 id 的副本，供主类 merge 里 indexSetting(saved.id()) 使用（mock 默认返回 null 会 NPE） */
     @BeforeEach
@@ -80,7 +81,7 @@ class SettingMergeServiceTest {
     }
 
     @Test
-    void merge_conflictingValue_returnsCONFLICT() {
+    void merge_conflictingValue_returnsCONFLICT_andOverwritesOldValue() {
         when(characterRepository.findByNameOrAlias(eq(1L), eq("主角"))).thenReturn(Optional.empty());
         when(worldSettingRepository.existsByEntity(eq(1L), eq("主角"))).thenReturn(true);
         when(worldSettingRepository.findByEntityAndAttribute(eq(1L), eq("主角"), eq("惯用手")))
@@ -92,7 +93,9 @@ class SettingMergeServiceTest {
         SettingMergeService.MergeResult r = service.merge(s, 1L, 50);
 
         assertEquals(SettingMergeService.MergeResult.CONFLICT, r);
+        // CONFLICT 直接覆盖旧值（update），不再新增/进待确认
         verify(worldSettingRepository, never()).save(any(WorldSetting.class));
+        verify(worldSettingRepository).update(any(WorldSetting.class));
     }
 
     @Test
@@ -129,10 +132,59 @@ class SettingMergeServiceTest {
 
         assertEquals(SettingMergeService.MergeResult.CONFLICT, r);
         verify(worldSettingRepository, never()).save(any(WorldSetting.class));
+        verify(worldSettingRepository).update(any(WorldSetting.class));
     }
 
     @Test
     void mergeUpdate_null_returnsDUPLICATE() {
         assertEquals(SettingMergeService.MergeResult.DUPLICATE, service.mergeUpdate(null, 1L, 1));
+    }
+
+    @Test
+    void judge_conflictingValue_returnsCONFLICT_withoutSaving() {
+        when(characterRepository.findByNameOrAlias(eq(1L), eq("主角"))).thenReturn(Optional.empty());
+        when(worldSettingRepository.existsByEntity(eq(1L), eq("主角"))).thenReturn(true);
+        when(worldSettingRepository.findByEntityAndAttribute(eq(1L), eq("主角"), eq("惯用手")))
+                .thenReturn(Optional.of(new WorldSetting(
+                        5L, 1L, "person", "主角 的 惯用手：左撇子",
+                        "主角", "惯用手", "左撇子", "证据", 3, 1)));
+
+        NewSetting s = new NewSetting("主角", "惯用手", "右手", "第50章主角右手持剑");
+        SettingMergeService.JudgeResult j = service.judge(s, 1L);
+
+        assertEquals(SettingMergeService.MergeResult.CONFLICT, j.result());
+        assertEquals("主角", j.canonicalEntity());
+        assertEquals("惯用手", j.attribute());
+        assertEquals("左撇子", j.existing().value());
+        // 纯判定绝不落库
+        verify(worldSettingRepository, never()).save(any(WorldSetting.class));
+    }
+
+    @Test
+    void judge_aliasEntity_normalizesCanonicalName() {
+        // 别名「林玄」→ 标准名「主角」：judge 应返回归一化后的 canonicalEntity
+        when(characterRepository.findByNameOrAlias(eq(1L), eq("林玄")))
+                .thenReturn(Optional.of(new CharacterRepository.Character(
+                        1L, 1L, "主角", List.of("林玄"), null, null, 3, null)));
+        when(worldSettingRepository.findByEntityAndAttribute(eq(1L), eq("主角"), eq("惯用手")))
+                .thenReturn(Optional.of(new WorldSetting(
+                        5L, 1L, "person", "主角 的 惯用手：左撇子",
+                        "主角", "惯用手", "左撇子", "证据", 3, 1)));
+
+        NewSetting s = new NewSetting("林玄", "惯用手", "右手", "第50章林玄右手持剑");
+        SettingMergeService.JudgeResult j = service.judge(s, 1L);
+
+        assertEquals(SettingMergeService.MergeResult.CONFLICT, j.result());
+        assertEquals("主角", j.canonicalEntity());
+        verify(worldSettingRepository, never()).save(any(WorldSetting.class));
+    }
+
+    @Test
+    void judge_blankEntity_returnsDUPLICATE() {
+        NewSetting s = new NewSetting("  ", "惯用手", "右手", "证据");
+        SettingMergeService.JudgeResult j = service.judge(s, 1L);
+
+        assertEquals(SettingMergeService.MergeResult.DUPLICATE, j.result());
+        assertNull(j.existing());
     }
 }

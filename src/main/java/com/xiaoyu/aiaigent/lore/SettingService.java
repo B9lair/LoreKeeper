@@ -99,26 +99,6 @@ public class SettingService {
         removeSettingIndex(id);
     }
 
-    /**
-     * 采纳冲突新值：更新既有设定 + 重建向量索引（不做冲突扫描，人工已裁决）。
-     * 供 B6 待确认队列 accept 复用，避免重复索引维护逻辑。
-     */
-    public WorldSetting applyValue(long workId, String entity, String attribute,
-                                   String newValue, String evidence, Integer chapterNo) {
-        WorldSetting ws = worldSettingRepository.findByEntityAndAttribute(workId, entity, attribute)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "设定不存在"));
-        int version = (ws.version() == null ? 0 : ws.version()) + 1;
-        String content = entity + " 的 " + attribute + "：" + newValue;
-        WorldSetting updated = new WorldSetting(ws.id(), workId, ws.type(), content,
-                entity, attribute, newValue, evidence, chapterNo, version);
-        int rows = worldSettingRepository.update(updated);
-        if (rows == 0) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "设定不存在或不属于当前作品");
-        }
-        reindexSetting(workId, ws.id(), chapterNo, content);
-        return updated;
-    }
-
     /** 重建索引：先删旧索引，再写新索引 */
     private void reindexSetting(long workId, long settingId, Integer chapterNo, String content) {
         removeSettingIndex(settingId);

@@ -2,7 +2,6 @@ package com.xiaoyu.aiaigent.lore;
 
 import com.xiaoyu.aiaigent.repository.ChapterRepository;
 import com.xiaoyu.aiaigent.repository.ForeshadowRepository;
-import com.xiaoyu.aiaigent.repository.PendingConflictRepository;
 import com.xiaoyu.aiaigent.repository.TimelineEventRepository;
 import com.xiaoyu.aiaigent.repository.WorldSettingRepository;
 import com.xiaoyu.aiaigent.repository.WorkRepository;
@@ -31,7 +30,6 @@ public class WorkService {
     private final WorldSettingRepository worldSettingRepository;
     private final ForeshadowRepository foreshadowRepository;
     private final TimelineEventRepository timelineEventRepository;
-    private final PendingConflictRepository pendingConflictRepository;
     private final JwtService jwtService;
     private final JdbcTemplate jdbcTemplate;
 
@@ -40,7 +38,6 @@ public class WorkService {
                        WorldSettingRepository worldSettingRepository,
                        ForeshadowRepository foreshadowRepository,
                        TimelineEventRepository timelineEventRepository,
-                       PendingConflictRepository pendingConflictRepository,
                        JwtService jwtService,
                        JdbcTemplate jdbcTemplate) {
         this.workRepository = workRepository;
@@ -48,7 +45,6 @@ public class WorkService {
         this.worldSettingRepository = worldSettingRepository;
         this.foreshadowRepository = foreshadowRepository;
         this.timelineEventRepository = timelineEventRepository;
-        this.pendingConflictRepository = pendingConflictRepository;
         this.jwtService = jwtService;
         this.jdbcTemplate = jdbcTemplate;
     }
@@ -106,7 +102,7 @@ public class WorkService {
     }
 
     /**
-     * 删除作品：级联删除该作品全部章节/设定/伏笔/时间线/待确认冲突/审查报告及向量索引。
+     * 删除作品：级联删除该作品全部章节/设定/伏笔/时间线/审查报告及向量索引。
      * 事务性：所有向量 metadata 都带 workId，一步删干净 vector_store；业务表与向量同库，
      * 整个级联放进一个 @Transactional 方法原子完成。
      */
@@ -126,7 +122,6 @@ public class WorkService {
         worldSettingRepository.deleteByWorkId(workId);
         foreshadowRepository.deleteByWorkId(workId);
         timelineEventRepository.deleteByWorkId(workId);
-        pendingConflictRepository.deleteByWorkId(workId);
         jdbcTemplate.update("DELETE FROM consistency_report WHERE work_id = ?", workId);
         workRepository.deleteById(workId, userId);
 

@@ -22,9 +22,6 @@
         <RouterLink to="/rag" class="nav-item">
           <span class="nav-icon" aria-hidden="true">▤</span>知识库
         </RouterLink>
-        <RouterLink to="/review" class="nav-item">
-          <span class="nav-icon" aria-hidden="true">⚑</span>审查
-        </RouterLink>
         <RouterLink to="/test" class="nav-item">
           <span class="nav-icon" aria-hidden="true">⌘</span>测试
         </RouterLink>

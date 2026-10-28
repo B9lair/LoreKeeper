@@ -2,7 +2,6 @@ package com.xiaoyu.aiaigent.lore;
 
 import com.xiaoyu.aiaigent.repository.ChapterRepository;
 import com.xiaoyu.aiaigent.repository.ForeshadowRepository;
-import com.xiaoyu.aiaigent.repository.PendingConflictRepository;
 import com.xiaoyu.aiaigent.repository.TimelineEventRepository;
 import com.xiaoyu.aiaigent.repository.WorldSettingRepository;
 import com.xiaoyu.aiaigent.repository.WorkRepository;
@@ -24,7 +23,7 @@ class WorkServiceTest {
     private final WorkService service = new WorkService(workRepository,
             mock(ChapterRepository.class), mock(WorldSettingRepository.class),
             mock(ForeshadowRepository.class), mock(TimelineEventRepository.class),
-            mock(PendingConflictRepository.class), jwtService, mock(JdbcTemplate.class));
+            jwtService, mock(JdbcTemplate.class));
 
     @Test
     void switchWork_ownWork_reissuesToken() {

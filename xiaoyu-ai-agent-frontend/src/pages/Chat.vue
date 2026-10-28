@@ -45,13 +45,10 @@
             <div class="bubble">
               <div class="bubble-head">
                 <span class="sender">{{ msg.role === 'user' ? '我' : 'LoreKeeper' }}</span>
-                <span v-if="msg.role === 'ai' && msg.intent" class="intent-badge" :class="intentCls(msg.intent)">
-                  <span class="dot" aria-hidden="true"></span>{{ intentLabel(msg.intent) }} · {{ msg.intent }}
-                </span>
               </div>
 
               <div v-if="msg.text" class="content">{{ msg.text }}</div>
-              <div v-else-if="msg.streaming" class="content streaming">正在路由意图并检索设定…</div>
+              <div v-else-if="msg.streaming" class="content streaming">正在检索设定…</div>
               <div v-if="msg.error" class="content err">{{ msg.error }}</div>
 
               <div v-if="msg.tools && msg.tools.length" class="trace-toggle" @click.stop="msg.showTools = !msg.showTools">
@@ -92,11 +89,8 @@
       <div v-if="showInspector" class="inspector-body">
         <template v-if="selectedMsg">
           <div class="ins-section">
-            <div class="ins-label">本轮意图</div>
-            <div v-if="selectedMsg.intent" class="intent-badge" :class="intentCls(selectedMsg.intent)">
-              <span class="dot" aria-hidden="true"></span>{{ intentLabel(selectedMsg.intent) }} · {{ selectedMsg.intent }}
-            </div>
-            <div v-else class="hint">等待路由…</div>
+            <div class="ins-label">Agent 流程</div>
+            <div class="hint">统一 Agent（无意图路由）</div>
           </div>
 
           <div class="ins-section">
@@ -123,7 +117,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { streamAssist } from '../api/assist';
 import { listConversations, getConversation, deleteConversation } from '../api/chat';
-import { intentLabel, intentCls } from '../utils/intent';
 import { workStore } from '../stores/work';
 
 const messages = ref([]);
@@ -210,7 +203,6 @@ const openConversation = async (conv) => {
       id: uid(),
       role: m.role,
       text: m.content,
-      intent: '',
       tools: [],
       error: '',
       streaming: false,
@@ -251,7 +243,6 @@ const handleSubmit = () => {
   const aiMsg = {
     id: uid(),
     role: 'ai',
-    intent: '',
     text: '',
     tools: [],
     error: '',
@@ -265,9 +256,6 @@ const handleSubmit = () => {
   scrollToBottom();
 
   ctrl = streamAssist(text, {
-    onIntent: (d) => {
-      aiMsg.intent = d;
-    },
     onTool: (d) => {
       aiMsg.tools.push(parseToolEvent(d));
       scrollToBottom();

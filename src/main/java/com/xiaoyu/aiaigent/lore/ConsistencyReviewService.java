@@ -1,8 +1,6 @@
 package com.xiaoyu.aiaigent.lore;
 
 import com.xiaoyu.aiaigent.repository.ForeshadowRepository;
-import com.xiaoyu.aiaigent.repository.PendingConflictRepository;
-import com.xiaoyu.aiaigent.repository.WorldSettingRepository;
 import com.xiaoyu.aiaigent.repository.WorldSettingRepository.WorldSetting;
 import org.springframework.stereotype.Service;
 
@@ -18,32 +16,29 @@ public class ConsistencyReviewService {
 
     private final EntityExtractor extractor;
     private final SettingMergeService mergeService;
-    private final WorldSettingRepository worldSettingRepository;
     private final ForeshadowRepository foreshadowRepository;
-    private final PendingConflictRepository pendingConflictRepository;
 
     public ConsistencyReviewService(EntityExtractor extractor,
                                     SettingMergeService mergeService,
-                                    WorldSettingRepository worldSettingRepository,
-                                    ForeshadowRepository foreshadowRepository,
-                                    PendingConflictRepository pendingConflictRepository) {
+                                    ForeshadowRepository foreshadowRepository) {
         this.extractor = extractor;
         this.mergeService = mergeService;
-        this.worldSettingRepository = worldSettingRepository;
         this.foreshadowRepository = foreshadowRepository;
-        this.pendingConflictRepository = pendingConflictRepository;
     }
 
-    public ConsistencyReport reviewChapter(long workId, Integer chapterNo, String chapterText) {
+    /**
+     * dry-run 一致性审查（只读，不落库）：供对话 Agent 的一致性检测工具调用。
+     * 纯判定（judge），不落库、不写向量、不落待确认队列。
+     */
+    public ConsistencyReport reviewChapterDryRun(long workId, Integer chapterNo, String chapterText) {
         ChapterExtraction ex = extractor.extract(chapterText);   // ① 抽取（内含 ② evidence 过滤）
 
         List<Conflict> conflicts = new ArrayList<>();
         for (NewSetting s : ex.settings()) {
-            handleSetting(s, workId, chapterNo, conflicts);
+            collectDryRunConflict(s, workId, chapterNo, conflicts);
         }
-        // 更新断言（值变）同样纳入审查（2.6.1 三类投影之「更新」）
         for (SettingUpdate u : ex.settingUpdates()) {
-            handleSetting(new NewSetting(u.entity(), u.attribute(), u.newValue(), u.evidence()),
+            collectDryRunConflict(new NewSetting(u.entity(), u.attribute(), u.newValue(), u.evidence()),
                     workId, chapterNo, conflicts);
         }
 
@@ -51,18 +46,12 @@ public class ConsistencyReviewService {
         return new ConsistencyReport(conflicts, reminders);
     }
 
-    private void handleSetting(NewSetting s, long workId, Integer chapterNo, List<Conflict> conflicts) {
-        if (mergeService.merge(s, workId, chapterNo) == SettingMergeService.MergeResult.CONFLICT) {
-            WorldSetting hist = worldSettingRepository
-                    .findByEntityAndAttribute(workId, s.entity(), s.attribute())
-                    .orElse(null);
-            // 落待确认队列（2.6.6 人机协同），供前端确认/驳回
-            pendingConflictRepository.save(workId, s.entity(), s.attribute(),
-                    hist == null ? null : hist.value(),
-                    s.value(),
-                    s.evidence(),
-                    chapterNo);
-            conflicts.add(compare(s, hist, chapterNo));     // ③ 归并 + ④ 逐条比对
+    private void collectDryRunConflict(NewSetting s, long workId, Integer chapterNo, List<Conflict> conflicts) {
+        SettingMergeService.JudgeResult j = mergeService.judge(s, workId);
+        if (j.result() == SettingMergeService.MergeResult.CONFLICT) {
+            // 用归一化实体名/属性，避免别名（"主角"）与标准名（"林玄"）不一致
+            NewSetting normalized = new NewSetting(j.canonicalEntity(), j.attribute(), s.value(), s.evidence());
+            conflicts.add(compare(normalized, j.existing(), chapterNo));
         }
     }
 

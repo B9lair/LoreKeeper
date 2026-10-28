@@ -58,7 +58,7 @@ class ConsistencyEvalRunnerTest {
         }
 
         mergeService = new SettingMergeService(characterRepository, worldSettingRepository,
-                mock(ChunkingService.class), mock(VectorStore.class));
+                mock(ChunkingService.class), mock(VectorStore.class), jdbcTemplate);
     }
 
     @AfterEach

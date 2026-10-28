@@ -3,7 +3,6 @@ package com.xiaoyu.aiaigent.lore;
 import com.xiaoyu.aiaigent.repository.ChapterRepository;
 import com.xiaoyu.aiaigent.repository.ChapterRepository.Chapter;
 import com.xiaoyu.aiaigent.repository.ForeshadowRepository;
-import com.xiaoyu.aiaigent.repository.PendingConflictRepository;
 import com.xiaoyu.aiaigent.repository.TimelineEventRepository;
 import com.xiaoyu.aiaigent.repository.WorldSettingRepository;
 import org.slf4j.Logger;
@@ -22,7 +21,7 @@ import java.util.stream.Collectors;
  *
  * <p>删除语义（已确认）：删一章 = 该章「长出来的所有东西」连根拔掉——
  * 章节原文、章节向量子块、该章确立的设定（含设定向量）、该章埋设的伏笔（含伏笔向量）、
- * 该章时间线、该章产生的待确认冲突、该章审查报告 全部删除；
+ * 该章时间线、该章审查报告 全部删除；
  * 在该章被「回收」的伏笔（resolved_chapter = 该章）回退为 open（边界 A）。</p>
  *
  * <p>事务性：pgvector（vector_store 表）与业务表同在云 RDS PostgreSQL，
@@ -38,21 +37,21 @@ public class ChapterService {
     private final WorldSettingRepository worldSettingRepository;
     private final ForeshadowRepository foreshadowRepository;
     private final TimelineEventRepository timelineEventRepository;
-    private final PendingConflictRepository pendingConflictRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final ChapterIngestService chapterIngestService;
 
     public ChapterService(ChapterRepository chapterRepository,
                           WorldSettingRepository worldSettingRepository,
                           ForeshadowRepository foreshadowRepository,
                           TimelineEventRepository timelineEventRepository,
-                          PendingConflictRepository pendingConflictRepository,
-                          JdbcTemplate jdbcTemplate) {
+                          JdbcTemplate jdbcTemplate,
+                          ChapterIngestService chapterIngestService) {
         this.chapterRepository = chapterRepository;
         this.worldSettingRepository = worldSettingRepository;
         this.foreshadowRepository = foreshadowRepository;
         this.timelineEventRepository = timelineEventRepository;
-        this.pendingConflictRepository = pendingConflictRepository;
         this.jdbcTemplate = jdbcTemplate;
+        this.chapterIngestService = chapterIngestService;
     }
 
     @Transactional
@@ -77,7 +76,6 @@ public class ChapterService {
         worldSettingRepository.deleteByChapter(workId, seq);
         foreshadowRepository.deleteByPlantedChapter(workId, seq);
         timelineEventRepository.deleteByChapter(workId, seq);
-        pendingConflictRepository.deleteByChapter(workId, seq);
         jdbcTemplate.update("DELETE FROM consistency_report WHERE chapter_id = ?", chapterId);
         chapterRepository.deleteById(chapterId, workId);
 
@@ -86,6 +84,24 @@ public class ChapterService {
 
         log.info("删除章节并级联清理：workId={} chapterId={} seq={} 设定={} 伏笔={}",
                 workId, chapterId, seq, settingIds.size(), foreshadowIds.size());
+    }
+
+    /**
+     * 覆盖式替换章节：级联删除旧章（原文/向量/设定/伏笔/时间线/审查报告 + 伏笔回退），
+     * 再用原 seq 重新入库新内容。整个「删旧 + 重入」在同一事务里，避免半覆盖。
+     */
+    @Transactional
+    public ChapterIngestResult replaceChapter(long workId, long chapterId, String title, String chapterText) {
+        Chapter ch = chapterRepository.findById(chapterId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "章节不存在"));
+        if (ch.workId() == null || ch.workId() != workId) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "章节不存在或不属于当前作品");
+        }
+        int seq = ch.seq();
+        // 1. 级联删除旧章（含伏笔回退）
+        deleteChapter(workId, chapterId);
+        // 2. 用原 seq 重新入库
+        return chapterIngestService.ingestWithSeq(workId, seq, title, chapterText);
     }
 
     /** 删章节向量子块：type=chapter + parentId=chapterId */

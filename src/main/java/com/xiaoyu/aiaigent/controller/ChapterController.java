@@ -95,10 +95,16 @@ public class ChapterController {
         return chapterRepository.findByWorkId(TenantContext.get().workId());
     }
 
-    /** 删除章节：级联删除该章原文、向量、设定、伏笔、时间线、待确认冲突、审查报告 */
+    /** 删除章节：级联删除该章原文、向量、设定、伏笔、时间线、审查报告 */
     @DeleteMapping("/{id}")
     public void delete(@PathVariable long id) {
         chapterService.deleteChapter(TenantContext.get().workId(), id);
+    }
+
+    /** 覆盖式替换章节：级联删除旧章（设定/伏笔库也会被完全覆盖）后用原 seq 重新入库 */
+    @PostMapping("/{id}/replace")
+    public ChapterIngestResult replace(@PathVariable long id, @RequestBody ChapterUploadRequest req) {
+        return chapterService.replaceChapter(TenantContext.get().workId(), id, req.title(), req.chapterText());
     }
 
     /** 归一化切分结果：过滤空章；占位标题（null/空/「全文」）回填为 fallbackTitle（单章时保留文件名语义） */

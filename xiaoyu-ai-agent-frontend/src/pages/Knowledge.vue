@@ -33,6 +33,12 @@
               <span class="kb-item-meta mono">seq {{ ch.seq }}</span>
               <button
                 type="button"
+                class="kb-item-replace"
+                title="覆盖该章节（重传替换，级联覆盖设定/伏笔）"
+                @click.stop="askReplace(ch)"
+              >⇄</button>
+              <button
+                type="button"
                 class="kb-item-del"
                 title="删除该章节（级联删除设定/伏笔/向量）"
                 @click.stop="askDelete(ch)"
@@ -144,12 +150,49 @@
         </div>
       </div>
     </div>
+
+    <!-- 覆盖章节弹窗 -->
+    <div v-if="confirmReplace" class="overlay" @click.self="confirmReplace = null">
+      <div class="modal">
+        <div class="modal-head">
+          <span class="panel-title">覆盖章节「{{ confirmReplace.title }}」</span>
+          <button type="button" class="btn ghost sm" @click="confirmReplace = null">关闭</button>
+        </div>
+        <div class="modal-body">
+          <div class="delete-warn">
+            覆盖将<b>级联替换</b>该章（原 seq 不变）：
+            <ul>
+              <li>章节原文 + 章节向量分块</li>
+              <li>该章确立的设定（含向量索引）</li>
+              <li>该章埋设的伏笔（含向量索引）</li>
+              <li>该章时间线</li>
+            </ul>
+            请粘贴修正后的章节正文：
+          </div>
+          <div class="field">
+            <label class="label">章节标题（留空沿用原标题）</label>
+            <input v-model="replaceTitle" class="input" :placeholder="confirmReplace.title" />
+          </div>
+          <div class="field">
+            <label class="label">章节正文</label>
+            <textarea v-model="replaceText" class="textarea" rows="10" placeholder="粘贴修正后的章节原文…"></textarea>
+          </div>
+          <div v-if="replaceError" class="error-box">{{ replaceError }}</div>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn ghost" @click="confirmReplace = null">取消</button>
+          <button type="button" class="btn primary" :disabled="replacing" @click="handleReplace">
+            {{ replacing ? '覆盖中…' : '确认覆盖' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
-import { listChapters, uploadChapter, uploadChapterFile, deleteChapter } from '../api/chapter';
+import { listChapters, uploadChapter, uploadChapterFile, deleteChapter, replaceChapter } from '../api/chapter';
 import { listChunks } from '../api/rag';
 import { workStore } from '../stores/work';
 
@@ -296,6 +339,48 @@ const handleDelete = async () => {
     deleteError.value = '删除失败：' + (e.response?.data?.message || e.message || '未知错误');
   } finally {
     deleting.value = false;
+  }
+};
+
+const confirmReplace = ref(null);
+const replaceTitle = ref('');
+const replaceText = ref('');
+const replacing = ref(false);
+const replaceError = ref('');
+
+const askReplace = (ch) => {
+  replaceError.value = '';
+  replaceTitle.value = '';
+  replaceText.value = '';
+  confirmReplace.value = ch;
+};
+
+const handleReplace = async () => {
+  const ch = confirmReplace.value;
+  if (!ch) return;
+  const text = replaceText.value.trim();
+  if (!text) {
+    replaceError.value = '请粘贴修正后的章节正文';
+    return;
+  }
+  replacing.value = true;
+  replaceError.value = '';
+  try {
+    await replaceChapter(ch.id, replaceTitle.value.trim() || null, text);
+    confirmReplace.value = null;
+    replaceTitle.value = '';
+    replaceText.value = '';
+    // 覆盖后章节 id 会变，按原 seq 重新定位选中
+    const list = await listChapters();
+    chapters.value = list;
+    const same = list.find((c) => c.seq === ch.seq);
+    selectedChapterId.value = same ? same.id : null;
+    if (same) await loadChunks();
+    else chunks.value = [];
+  } catch (e) {
+    replaceError.value = '覆盖失败：' + (e.response?.data?.message || e.message || '未知错误');
+  } finally {
+    replacing.value = false;
   }
 };
 
@@ -568,7 +653,8 @@ watch(() => workStore.version, () => {
   background: var(--border);
 }
 
-.kb-item-del {
+.kb-item-del,
+.kb-item-replace {
   border: none;
   background: transparent;
   color: var(--text-faint);
@@ -581,13 +667,19 @@ watch(() => workStore.version, () => {
   transition: opacity 0.15s;
 }
 
-.kb-item:hover .kb-item-del {
+.kb-item:hover .kb-item-del,
+.kb-item:hover .kb-item-replace {
   opacity: 1;
 }
 
 .kb-item-del:hover {
   color: var(--danger);
   background: var(--danger-soft);
+}
+
+.kb-item-replace:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .delete-warn {

@@ -22,7 +22,13 @@ export function listChapters() {
   return http.get('/lore/chapter/list').then(({ data }) => data);
 }
 
-// 删除章节（级联删除原文/向量/设定/伏笔/时间线/待确认冲突/审查报告）
+// 覆盖式替换章节：级联删除旧章（设定/伏笔库也会被完全覆盖）后用原 seq 重新入库
+export function replaceChapter(id, title, chapterText) {
+  return http.post(`/lore/chapter/${id}/replace`, { title, chapterText }, { timeout: 300000 })
+    .then(({ data }) => data);
+}
+
+// 删除章节（级联删除原文/向量/设定/伏笔/时间线/审查报告）
 export function deleteChapter(id) {
   return http.delete(`/lore/chapter/${id}`);
 }
