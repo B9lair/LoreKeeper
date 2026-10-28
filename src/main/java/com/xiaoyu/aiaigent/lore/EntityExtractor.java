@@ -45,12 +45,14 @@ public class EntityExtractor {
             settingUpdates[]: {entity, attribute, newValue, evidence}
             foreshadows[]: {content, evidence}
             timeline[]: {timePoint, event, evidence}
+            characters[]: {name, aliases[]}
 
             硬性约束：
             ① 只抽明确写出的，禁止脑补；
             ② 每条必带 evidence（原文原句），为空会被丢弃；
             ③ 优先高召回：拿不准的也抽出来，宁多勿漏——漏掉的设定会导致后续"吃书"事故，误抽由下游归并/待确认队列兜底；
-            ④ entity 用角色/地点的标准名（首次出现用本名），attribute 用稳定可复用的措辞（如"惯用手"而非"怎么拿剑"）。""";
+            ④ entity 用角色/地点的标准名（首次出现用本名），attribute 用稳定可复用的措辞（如"惯用手"而非"怎么拿剑"）；
+            ⑤ characters 只列「人物」角色（地点/门派/物品不进），name 填标准名/全名，aliases 填该角色的其他称呼（如"主角""林玄"）；settings 里的 entity 若指人物，也应与 characters.name 对齐。""";
 
     public ChapterExtraction extract(String chapterText) {
         ChapterExtraction ex = chatClient.prompt()
@@ -72,7 +74,8 @@ public class EntityExtractor {
                 filterSettings(ex.settings()),
                 filterUpdates(ex.settingUpdates()),
                 filterForeshadows(ex.foreshadows()),
-                filterTimeline(ex.timeline()));
+                filterTimeline(ex.timeline()),
+                filterCharacters(ex.characters()));
     }
 
     private static List<NewSetting> filterSettings(List<NewSetting> list) {
@@ -96,6 +99,8 @@ public class EntityExtractor {
         return list.stream()
                 .filter(Objects::nonNull)
                 .filter(f -> isNotBlank(f.evidence()))
+                // content 也必须非空：空 content 会落表但 embedding 空文本失败，导致「表有、向量无」不一致
+                .filter(f -> isNotBlank(f.content()))
                 .toList();
     }
 
@@ -104,6 +109,14 @@ public class EntityExtractor {
         return list.stream()
                 .filter(Objects::nonNull)
                 .filter(t -> isNotBlank(t.evidence()))
+                .toList();
+    }
+
+    private static List<CharacterRef> filterCharacters(List<CharacterRef> list) {
+        if (list == null) return List.of();
+        return list.stream()
+                .filter(Objects::nonNull)
+                .filter(c -> isNotBlank(c.name()))
                 .toList();
     }
 

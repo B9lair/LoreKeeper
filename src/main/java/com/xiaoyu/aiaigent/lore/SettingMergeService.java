@@ -173,15 +173,15 @@ public class SettingMergeService {
 
     /** 覆盖式更新后重建索引：先删旧索引（entityId 相同），再写新索引 */
     private void reindexSetting(long workId, long settingId, Integer chapterNo, String content) {
-        removeSettingIndex(settingId);
+        removeSettingIndex(workId, settingId);
         indexSetting(workId, settingId, chapterNo, content);
     }
 
-    /** 删设定向量索引：entityId 存的是字符串 */
-    private void removeSettingIndex(long settingId) {
+    /** 删设定向量索引：workId + entityId 精确删除（entityId 存的是字符串） */
+    private void removeSettingIndex(long workId, long settingId) {
         jdbcTemplate.update(
-                "DELETE FROM vector_store WHERE metadata ->> 'type' = 'setting' AND metadata ->> 'entityId' = ?",
-                String.valueOf(settingId));
+                "DELETE FROM vector_store WHERE metadata ->> 'workId' = ? AND metadata ->> 'type' = 'setting' AND metadata ->> 'entityId' = ?",
+                String.valueOf(workId), String.valueOf(settingId));
     }
 
     private static String normalize(String s) {

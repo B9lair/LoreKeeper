@@ -24,7 +24,8 @@ class EntityExtractorTest {
                 List.of(
                         new TimelineEvent("三年前", "青阳城大战", "原文原句"),
                         new TimelineEvent("昨天", "下雨", "")
-                ));
+                ),
+                List.of());
 
         ChapterExtraction filtered = EntityExtractor.filterEmptyEvidence(ex);
 

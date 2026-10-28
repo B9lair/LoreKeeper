@@ -68,9 +68,9 @@ public class ChapterService {
         List<Long> foreshadowIds = foreshadowRepository.findIdsByPlantedChapter(workId, seq);
 
         // ② 删向量索引（章节子块 + 设定 + 伏笔）
-        deleteChapterVectors(chapterId);
-        deleteEntityVectors("setting", settingIds);
-        deleteEntityVectors("foreshadow", foreshadowIds);
+        deleteChapterVectors(workId, chapterId);
+        deleteEntityVectors(workId, "setting", settingIds);
+        deleteEntityVectors(workId, "foreshadow", foreshadowIds);
 
         // ③ 删事实源表
         worldSettingRepository.deleteByChapter(workId, seq);
@@ -104,15 +104,15 @@ public class ChapterService {
         return chapterIngestService.ingestWithSeq(workId, seq, title, chapterText);
     }
 
-    /** 删章节向量子块：type=chapter + parentId=chapterId */
-    private void deleteChapterVectors(long chapterId) {
+    /** 删章节向量子块：workId + type=chapter + parentId=chapterId */
+    private void deleteChapterVectors(long workId, long chapterId) {
         jdbcTemplate.update(
-                "DELETE FROM vector_store WHERE metadata ->> 'type' = 'chapter' AND metadata ->> 'parentId' = ?",
-                String.valueOf(chapterId));
+                "DELETE FROM vector_store WHERE metadata ->> 'workId' = ? AND metadata ->> 'type' = 'chapter' AND metadata ->> 'parentId' = ?",
+                String.valueOf(workId), String.valueOf(chapterId));
     }
 
-    /** 删设定/伏笔向量索引：type + entityId IN (...)。entityId 存字符串，故每个 id 必须加单引号，否则 PG 报 text = integer。 */
-    private void deleteEntityVectors(String type, List<Long> ids) {
+    /** 删设定/伏笔向量索引：workId + type + entityId IN (...)。entityId 存字符串，故每个 id 必须加单引号，否则 PG 报 text = integer。 */
+    private void deleteEntityVectors(long workId, String type, List<Long> ids) {
         if (ids == null || ids.isEmpty()) {
             return;
         }
@@ -120,7 +120,7 @@ public class ChapterService {
                 .map(id -> "'" + id + "'")
                 .collect(Collectors.joining(","));
         jdbcTemplate.update(
-                "DELETE FROM vector_store WHERE metadata ->> 'type' = ? AND metadata ->> 'entityId' IN (" + inClause + ")",
-                type);
+                "DELETE FROM vector_store WHERE metadata ->> 'workId' = ? AND metadata ->> 'type' = ? AND metadata ->> 'entityId' IN (" + inClause + ")",
+                String.valueOf(workId), type);
     }
 }

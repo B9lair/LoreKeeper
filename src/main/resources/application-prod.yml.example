@@ -41,7 +41,6 @@ lorekeeper:
     expire-ms: 604800000
   chat-memory-dir: ${user.dir}/chat-memory
   mcp:
-    doc-parser-url: http://localhost:8124
     database-url: http://localhost:8125
 
 rag:

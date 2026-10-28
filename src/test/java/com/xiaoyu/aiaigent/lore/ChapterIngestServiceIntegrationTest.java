@@ -54,6 +54,7 @@ class ChapterIngestServiceIntegrationTest {
         jdbcTemplate.update("DELETE FROM world_setting WHERE work_id = ?", workId);
         jdbcTemplate.update("DELETE FROM foreshadow WHERE work_id = ?", workId);
         jdbcTemplate.update("DELETE FROM timeline_event WHERE work_id = ?", workId);
+        jdbcTemplate.update("DELETE FROM character WHERE work_id = ?", workId);
         jdbcTemplate.update("DELETE FROM work WHERE user_id = ?", userId);
         jdbcTemplate.update("DELETE FROM users WHERE id = ?", userId);
     }

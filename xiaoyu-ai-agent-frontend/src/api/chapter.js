@@ -7,7 +7,7 @@ export function uploadChapter(title, chapterText) {
     .then(({ data }) => data);
 }
 
-// 上传章节文件（multipart，后端本地解析后整本切章、逐章入库）
+// 上传章节文件（multipart，后端本地解析后整本作为一章入库）
 // 返回 ChapterBatchIngestResult { chapterCount, chapters, totalNewSettings, totalUpdatedSettings, totalConflicts, totalForeshadows }
 export function uploadChapterFile(file, title) {
   const form = new FormData();

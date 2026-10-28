@@ -53,8 +53,12 @@ http.interceptors.response.use(
   (error) => {
     if (error.response && error.response.status === 401) {
       clearAuth();
+      // 回首页（或原地刷新）重新触发 router.beforeEach 的 demo 自动登录；
+      // 在首页时也要 reload，否则清空登录态后页面不会自动重登，需手动刷新
       if (window.location.pathname !== '/') {
         window.location.href = '/';
+      } else {
+        window.location.reload();
       }
     }
     return Promise.reject(error);

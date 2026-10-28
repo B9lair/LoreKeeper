@@ -9,7 +9,7 @@ const routes = [
     component: () => import('../pages/Chat.vue'),
     meta: {
       title: '对话｜LoreKeeper 设定守护者',
-      description: 'Agentic RAG 对话：意图路由 + 工具调用可观测。'
+      description: '统一 Agent（ReAct 自主规划）对话：工具调用可观测。'
     }
   },
   {
@@ -27,7 +27,7 @@ const routes = [
     component: () => import('../pages/TestLab.vue'),
     meta: {
       title: '测试台｜LoreKeeper 设定守护者',
-      description: 'MCP 工具测试 + RAG 检索测试 + 意图路由测试。'
+      description: 'MCP 工具测试 + RAG 检索测试。'
     }
   },
   {

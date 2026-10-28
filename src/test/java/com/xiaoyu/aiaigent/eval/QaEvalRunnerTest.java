@@ -1,6 +1,5 @@
 package com.xiaoyu.aiaigent.eval;
 
-import com.xiaoyu.aiaigent.agent.IntentRouter;
 import com.xiaoyu.aiaigent.agent.LoreAgentFactory;
 import com.xiaoyu.aiaigent.agent.ToolCallAgent;
 import com.xiaoyu.aiaigent.common.TenantContext;
@@ -26,7 +25,7 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
- * 端到端问答评测运行器：真连 DB + LLM，走真实链路（IntentRouter → LoreAgentFactory → ToolCallAgent）拿最终回答，
+ * 端到端问答评测运行器：真连 DB + LLM，走真实链路（LoreAgentFactory → ToolCallAgent）拿最终回答，
  * 再用 LlmJudgeService 打 Faithfulness / Answer Relevancy / Answer Accuracy 三指标（归因层 + 回答层）。
  * <p>
  * ⚠️ LLM 结果随机、慢、费 key，故 {@code @Disabled} 默认不进常规 mvn test（与 ExtractionEvalRunnerTest 约定一致）。
@@ -37,7 +36,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 @Tag("llm")
 class QaEvalRunnerTest {
 
-    @Resource private IntentRouter intentRouter;
     @Resource private LoreAgentFactory loreAgentFactory;
     @Resource private HybridSearchService hybridSearchService;
     @Resource private LlmJudgeService llmJudgeService;
@@ -96,11 +94,10 @@ class QaEvalRunnerTest {
         printReplay(results);
     }
 
-    /** 真实链路：意图路由 → 装配 Agent → 同步 run，取最终回答（与 AiController.doChatWithLore 同链路，run 替 runstream） */
+    /** 真实链路：装配统一 Agent → 同步 run，取最终回答（与 AiController.doChatWithLore 同链路，run 替 runstream） */
     private String askAgent(String question) {
         TenantContext.Tenant tenant = new TenantContext.Tenant(TEST_USER_ID, TEST_WORK_ID);
-        IntentRouter.RouteResult route = intentRouter.route(question);
-        ToolCallAgent agent = loreAgentFactory.create(route.intent(), route.querySubType(), tenant, null);
+        ToolCallAgent agent = loreAgentFactory.create(tenant, null);
         agent.run(question);
         String answer = agent.getLastAnswer();
         return (answer == null || answer.isBlank()) ? "（Agent 未产生最终回答）" : answer;

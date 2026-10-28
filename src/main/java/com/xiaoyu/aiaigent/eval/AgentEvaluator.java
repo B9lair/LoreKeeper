@@ -1,14 +1,13 @@
 package com.xiaoyu.aiaigent.eval;
 
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 /**
  * Agent 层评测器（纯函数、无状态，不碰 DB / 向量库 / LLM，可直接单测进 CI）。
- * 对应方案阶段三 3.2：工具调用 F1 + 意图准确率。
+ * 对应方案阶段三 3.2：工具调用 F1。
  * <p>
- * 注意：这里只做「确定性比对」。意图预测、工具序列来自真实链路（依赖 LLM），
+ * 注意：这里只做「确定性比对」。工具序列来自真实链路（依赖 LLM），
  * 由运行器（{@code @Disabled}）采集后喂入本评测器，本评测器本身零 LLM 依赖。
  */
 public class AgentEvaluator {
@@ -37,27 +36,5 @@ public class AgentEvaluator {
         double recall = exp.isEmpty() ? 0.0 : (double) tp / exp.size();
         double f1 = (precision + recall == 0.0) ? 0.0 : 2.0 * precision * recall / (precision + recall);
         return new ToolMetrics(precision, recall, f1);
-    }
-
-    /**
-     * 意图准确率：逐条比对 predicted vs expected（下标一一对应），命中数 / 总数。
-     *
-     * @param predicted 模型预测的意图（如 IntentRouter.route 的 intent.name()）
-     * @param expected  标注意图（golden）
-     */
-    public double intentAccuracy(List<String> predicted, List<String> expected) {
-        if (predicted == null || expected == null || expected.isEmpty()) {
-            return 0.0;
-        }
-        if (predicted.size() != expected.size()) {
-            throw new IllegalArgumentException("predicted 与 expected 数量必须一致");
-        }
-        int hit = 0;
-        for (int i = 0; i < expected.size(); i++) {
-            if (expected.get(i) != null && expected.get(i).equals(predicted.get(i))) {
-                hit++;
-            }
-        }
-        return (double) hit / expected.size();
     }
 }

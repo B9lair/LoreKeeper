@@ -29,7 +29,7 @@
     <section class="chat-main">
       <div ref="scrollEl" class="chat-window">
         <div v-if="messages.length === 0" class="empty">
-          写新章节前输入一段剧情，LoreKeeper 会路由意图、检索设定并生成提示卡。
+          输入剧情或问题，LoreKeeper 统一 Agent 会自动检索设定并生成回答。
         </div>
 
         <div
@@ -135,21 +135,41 @@ const uid = () => Date.now() + '-' + Math.random().toString(36).slice(2, 8);
 
 const selectedMsg = computed(() => messages.value.find((m) => m.id === selectedId.value) || null);
 
-// 工具事件解析：Step N: 工具xxx完成了它的任务！结果：...
-function parseToolEvent(data) {
+// 工具事件解析：Step N: 工具xxx完成了它的任务！结果：...（一轮可能执行多个工具，结果以换行拼接）
+function parseToolEvents(data) {
   const stepMatch = data.match(/^Step (\d+):\s*/);
   const step = stepMatch ? Number(stepMatch[1]) : null;
   const body = stepMatch ? data.slice(stepMatch[0].length) : data;
-  const toolMatch = body.match(/^工具([A-Za-z_][\w]*)完成了它的任务！结果：([\s\S]*)$/);
-  if (toolMatch) {
-    return { step, name: toolMatch[1], result: toolMatch[2], kind: kindOf(toolMatch[1]) };
+  // 按「工具X完成了它的任务！结果：」分段，逐段产出工具条目（避免多工具同轮只识别第一个）
+  const delim = /工具([A-Za-z_][\w]*)完成了它的任务！结果：/g;
+  const tools = [];
+  let match;
+  let pendingName = null;
+  let pendingStart = 0;
+  while ((match = delim.exec(body)) !== null) {
+    if (pendingName !== null) {
+      tools.push(makeTool(step, pendingName, body.slice(pendingStart, match.index)));
+    }
+    pendingName = match[1];
+    pendingStart = match.index + match[0].length;
   }
-  return { step, name: null, result: body, kind: 'note' };
+  if (pendingName !== null) {
+    tools.push(makeTool(step, pendingName, body.slice(pendingStart)));
+  }
+  if (tools.length === 0) {
+    return [{ step, name: null, result: body, kind: 'note' }];
+  }
+  return tools;
+}
+
+function makeTool(step, name, result) {
+  return { step, name, result: result.replace(/\n$/, ''), kind: kindOf(name) };
 }
 
 function kindOf(name) {
-  if (['parse_document', 'query_database'].includes(name)) return 'mcp';
+  if (name === 'query_database') return 'mcp';
   if (name === 'settingSearch') return 'rag';
+  if (name === 'consistencyCheck') return 'review';
   if (name === 'doTerminate') return 'end';
   return 'note';
 }
@@ -157,6 +177,7 @@ function kindOf(name) {
 function toolIcon(t) {
   if (t.kind === 'mcp') return 'MCP';
   if (t.kind === 'rag') return 'RAG';
+  if (t.kind === 'review') return 'CHK';
   if (t.kind === 'end') return 'END';
   return '···';
 }
@@ -257,7 +278,7 @@ const handleSubmit = () => {
 
   ctrl = streamAssist(text, {
     onTool: (d) => {
-      aiMsg.tools.push(parseToolEvent(d));
+      aiMsg.tools.push(...parseToolEvents(d));
       scrollToBottom();
     },
     onAnswer: (d) => {
@@ -290,6 +311,14 @@ const stop = () => {
     ctrl = null;
   }
   loading.value = false;
+  // 将进行中的 AI 消息标记为已停止，避免一直显示「正在检索设定…」
+  const streamingMsg = messages.value.find((m) => m.role === 'ai' && m.streaming);
+  if (streamingMsg) {
+    streamingMsg.streaming = false;
+    if (!streamingMsg.text && !streamingMsg.error) {
+      streamingMsg.text = '（已停止）';
+    }
+  }
 };
 
 onMounted(async () => {

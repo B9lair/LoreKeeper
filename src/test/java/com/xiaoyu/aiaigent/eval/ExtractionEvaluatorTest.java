@@ -24,7 +24,7 @@ class ExtractionEvaluatorTest {
                         new NewSetting("", "身份", "剑修", "e"),        // 空串过滤
                         new NewSetting("青阳城", "供暖", "灵石阵", "e")
                 ),
-                List.of(), List.of(), List.of());
+                List.of(), List.of(), List.of(), List.of());
 
         assertEquals(Set.of("主角", "青阳城"), ExtractionEvaluator.entitiesOf(ex));
     }
@@ -42,7 +42,7 @@ class ExtractionEvaluatorTest {
                                 new NewSetting("主角", "惯用手", "左撇子", "e"),
                                 new NewSetting("青阳城", "供暖", "灵石阵", "e")
                         ),
-                        List.of(), List.of(new Foreshadow("她总觉得这事没那么简单", "e")), List.of()),
+                        List.of(), List.of(new Foreshadow("她总觉得这事没那么简单", "e")), List.of(), List.of()),
                 // 样本2：全漏（实体 0，伏笔 0）
                 ChapterExtraction.empty()
         );
@@ -94,7 +94,7 @@ class ExtractionEvaluatorTest {
         List<ChapterExtraction> extractions = List.of(
                 new ChapterExtraction(
                         List.of(new NewSetting("林玄", "惯用手", "左撇子", "e")),
-                        List.of(), List.of(), List.of())
+                        List.of(), List.of(), List.of(), List.of())
         );
 
         // 未归一：林玄 != 主角 → 全 miss

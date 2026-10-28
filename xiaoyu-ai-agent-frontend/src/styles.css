@@ -25,13 +25,6 @@
   --hover: rgba(35, 33, 29, 0.045);
   --hover-strong: rgba(35, 33, 29, 0.075);
 
-  /* 意图色（浅色模式下用更深饱和色保证对比） */
-  --intent-write: #1a6fd6;
-  --intent-review: #c0581a;
-  --intent-query: #1d8a3c;
-  --intent-foreshadow: #7a3fd0;
-  --intent-chat: #6b665b;
-
   /* 语义色 */
   --ok: #1d8a3c;
   --warn: #b0760a;
@@ -395,32 +388,6 @@ body {
   background: var(--danger-soft);
 }
 
-/* ============ 意图徽章 ============ */
-.intent-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  border: 1px solid;
-}
-
-.intent-badge .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: currentColor;
-}
-
-.intent-write { color: var(--intent-write); border-color: rgba(26, 111, 214, 0.35); background: rgba(26, 111, 214, 0.10); }
-.intent-review { color: var(--intent-review); border-color: rgba(192, 88, 26, 0.35); background: rgba(192, 88, 26, 0.10); }
-.intent-query { color: var(--intent-query); border-color: rgba(29, 138, 60, 0.35); background: rgba(29, 138, 60, 0.10); }
-.intent-foreshadow { color: var(--intent-foreshadow); border-color: rgba(122, 63, 208, 0.35); background: rgba(122, 63, 208, 0.10); }
-.intent-chat { color: var(--intent-chat); border-color: var(--border-strong); background: var(--bg-inset); }
-
 /* ============ 工具调用 trace ============ */
 .tool-step {
   display: flex;
@@ -465,8 +432,8 @@ body {
 
 .tool-step.kind-mcp .t-icon { background: rgba(122, 63, 208, 0.12); color: #6a2fc0; }
 .tool-step.kind-mcp .t-name { color: #6a2fc0; }
-.tool-step.kind-rag .t-icon { background: rgba(26, 111, 214, 0.12); color: var(--intent-write); }
-.tool-step.kind-rag .t-name { color: var(--intent-write); }
+.tool-step.kind-rag .t-icon { background: rgba(26, 111, 214, 0.12); color: #1a6fd6; }
+.tool-step.kind-rag .t-name { color: #1a6fd6; }
 .tool-step.kind-end { opacity: 0.55; }
 .tool-step.kind-end .t-icon { background: var(--hover); color: var(--text-muted); }
 

@@ -2,7 +2,6 @@ package com.xiaoyu.aiaigent.eval;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -66,30 +65,5 @@ class AgentEvaluatorTest {
         assertEquals(0.0, m.precision(), 1e-9);
         assertEquals(0.0, m.recall(), 1e-9);
         assertEquals(0.0, m.f1(), 1e-9);
-    }
-
-    @Test
-    void intentAccuracy_allCorrect() {
-        assertEquals(1.0, evaluator.intentAccuracy(
-                List.of("QUERY", "WRITE", "CHAT"),
-                List.of("QUERY", "WRITE", "CHAT")), 1e-9);
-    }
-
-    @Test
-    void intentAccuracy_partialCorrect() {
-        assertEquals(2.0 / 3.0, evaluator.intentAccuracy(
-                List.of("QUERY", "WRITE", "QUERY"),
-                List.of("QUERY", "WRITE", "CHAT")), 1e-9);
-    }
-
-    @Test
-    void intentAccuracy_sizeMismatch_throws() {
-        assertThrows(IllegalArgumentException.class, () ->
-                evaluator.intentAccuracy(List.of("QUERY"), List.of("QUERY", "WRITE")));
-    }
-
-    @Test
-    void intentAccuracy_emptyExpected_returnsZero() {
-        assertEquals(0.0, evaluator.intentAccuracy(List.of(), List.of()), 1e-9);
     }
 }

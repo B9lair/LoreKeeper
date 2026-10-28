@@ -21,10 +21,10 @@ public class SettingSearchTool {
 
     private final long workId;
 
-    /** 检索类型白名单（null = 不过滤，三类内容全召回）；硬过滤，WRITE/REVIEW 用 */
+    /** 检索类型白名单（null = 不过滤，三类内容全召回）；统一 Agent 恒传 null，保留硬过滤入口 */
     private final Set<String> types;
 
-    /** 优先类型（null = 无优先级）：优先召回这些类型，不足 topK 再用全量补；QUERY_SETTING 用 */
+    /** 优先类型（null = 无优先级）：优先召回这些类型，不足 topK 再用全量补；统一 Agent 传 setting/foreshadow */
     private final Set<String> preferredTypes;
 
     public SettingSearchTool(HybridSearchService hybridSearchService, long workId) {

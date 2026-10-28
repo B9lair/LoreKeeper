@@ -26,7 +26,7 @@ class ConsistencyReviewServiceTest {
         NewSetting conflictSetting = new NewSetting("主角", "惯用手", "右手", "第50章主角右手持剑");
         NewSetting normalSetting = new NewSetting("女二", "身份", "剑修", "第3章女二是剑修");
         ChapterExtraction ex = new ChapterExtraction(
-                List.of(conflictSetting, normalSetting), List.of(), List.of(), List.of());
+                List.of(conflictSetting, normalSetting), List.of(), List.of(), List.of(), List.of());
 
         when(extractor.extract(anyString())).thenReturn(ex);
         when(mergeService.judge(eq(conflictSetting), eq(1L)))
@@ -59,7 +59,7 @@ class ConsistencyReviewServiceTest {
     void reviewChapterDryRun_consumesSettingUpdates_asConflicts() {
         SettingUpdate update = new SettingUpdate("主角", "惯用手", "右手", "第50章主角右手持剑");
         ChapterExtraction ex = new ChapterExtraction(
-                List.of(), List.of(update), List.of(), List.of());
+                List.of(), List.of(update), List.of(), List.of(), List.of());
 
         when(extractor.extract(anyString())).thenReturn(ex);
         when(mergeService.judge(any(NewSetting.class), eq(1L)))

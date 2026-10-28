@@ -60,14 +60,14 @@ public class ForeshadowService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "伏笔查询失败"));
     }
 
-    /** 删除伏笔：先删向量索引，再删事实源表（单事务原子完成） */
+    /** 删除伏笔：先删事实源表（校验归属），再删向量索引（单事务原子完成） */
     @Transactional
     public void delete(long workId, long id) {
-        removeForeshadowIndex(id);
         int rows = foreshadowRepository.deleteById(id, workId);
         if (rows == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "伏笔不存在或不属于当前作品");
         }
+        removeForeshadowIndex(workId, id);
     }
 
     private void indexForeshadow(long workId, long fid, Integer chapterNo, String content) {
@@ -76,14 +76,14 @@ public class ForeshadowService {
             vectorStore.add(List.of(
                     chunkingService.settingToDocument(workId, fid, no, "foreshadow", content)));
         } catch (Exception e) {
-            log.warn("伏笔向量索引失败（事实源已落库，可后续重建）: {}", e.getMessage());
+            log.warn("伏笔向量索引失败（事实源已落库，可后续重建）fid={} content={}: {}", fid, content, e.getMessage());
         }
     }
 
-    /** 删向量索引：type=foreshadow + entityId=foreshadowId（Document.id 是 UUID，只能 jdbcTemplate 直删） */
-    private void removeForeshadowIndex(long foreshadowId) {
+    /** 删向量索引：workId + type=foreshadow + entityId=foreshadowId（Document.id 是 UUID，只能 jdbcTemplate 直删） */
+    private void removeForeshadowIndex(long workId, long foreshadowId) {
         jdbcTemplate.update(
-                "DELETE FROM vector_store WHERE metadata ->> 'type' = 'foreshadow' AND metadata ->> 'entityId' = ?",
-                String.valueOf(foreshadowId));
+                "DELETE FROM vector_store WHERE metadata ->> 'workId' = ? AND metadata ->> 'type' = 'foreshadow' AND metadata ->> 'entityId' = ?",
+                String.valueOf(workId), String.valueOf(foreshadowId));
     }
 }

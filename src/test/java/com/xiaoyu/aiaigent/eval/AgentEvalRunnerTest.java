@@ -1,6 +1,5 @@
 package com.xiaoyu.aiaigent.eval;
 
-import com.xiaoyu.aiaigent.agent.IntentRouter;
 import com.xiaoyu.aiaigent.agent.LoreAgentFactory;
 import com.xiaoyu.aiaigent.agent.ToolCallAgent;
 import com.xiaoyu.aiaigent.common.TenantContext;
@@ -25,7 +24,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
- * Agent 层评测运行器：真连 DB + LLM，走真实链路（IntentRouter → LoreAgentFactory → ToolCallAgent）拿
+ * Agent 层评测运行器：真连 DB + LLM，走真实链路（LoreAgentFactory → ToolCallAgent）拿
  * 实际工具序列 + 最终回答，算 Tool Call F1（确定性，{@link AgentEvaluator}）+ Goal Accuracy（LLM-as-judge 判 successCriteria）。
  * <p>
  * ⚠️ {@code @Disabled} 默认不进常规 mvn test（Agent 链路依赖 LLM，结果随机）。
@@ -36,7 +35,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 @Tag("llm")
 class AgentEvalRunnerTest {
 
-    @Resource private IntentRouter intentRouter;
     @Resource private LoreAgentFactory loreAgentFactory;
     @Resource private LlmJudgeService llmJudgeService;
     @Resource private ChunkingService chunkingService;
@@ -104,11 +102,10 @@ class AgentEvalRunnerTest {
         System.out.printf("Goal Accuracy=%.4f (%d/%d)%n", (double) goalHits / n, goalHits, n);
     }
 
-    /** 真实链路：意图路由 → 装配 Agent → 同步 run，返回 Agent（供读取工具序列 + 最终回答） */
+    /** 真实链路：装配统一 Agent → 同步 run，返回 Agent（供读取工具序列 + 最终回答） */
     private ToolCallAgent runAgent(String question) {
         TenantContext.Tenant tenant = new TenantContext.Tenant(TEST_USER_ID, TEST_WORK_ID);
-        IntentRouter.RouteResult route = intentRouter.route(question);
-        ToolCallAgent agent = loreAgentFactory.create(route.intent(), route.querySubType(), tenant, null);
+        ToolCallAgent agent = loreAgentFactory.create(tenant, null);
         agent.run(question);
         return agent;
     }

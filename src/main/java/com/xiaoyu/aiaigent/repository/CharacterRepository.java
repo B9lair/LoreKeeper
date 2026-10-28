@@ -92,6 +92,48 @@ public class CharacterRepository {
         return list.stream().findFirst();
     }
 
+    /**
+     * 列出「回填候选」：world_setting 里出现过的实体名，且尚未成为角色（不在 character 的 name/aliases 中），
+     * 且未被人工忽略（不在 character_ignored 中）。
+     * 供「角色导入」人工确认用——候选里可能混有地点/门派等非人物，交由人工勾选裁决或忽略。
+     */
+    public List<String> findCandidateNames(Long workId) {
+        return jdbcTemplate.queryForList(
+                "SELECT DISTINCT ws.entity FROM world_setting ws " +
+                "WHERE ws.work_id = ? AND ws.entity IS NOT NULL " +
+                "AND NOT EXISTS (" +
+                "  SELECT 1 FROM character c WHERE c.work_id = ws.work_id " +
+                "  AND (c.name = ws.entity OR EXISTS (" +
+                "    SELECT 1 FROM jsonb_array_elements_text(c.aliases) a WHERE a = ws.entity" +
+                "  ))" +
+                ") " +
+                "AND NOT EXISTS (" +
+                "  SELECT 1 FROM character_ignored ig WHERE ig.work_id = ws.work_id AND ig.entity = ws.entity" +
+                ") ORDER BY ws.entity",
+                String.class, workId);
+    }
+
+    /** 忽略候选实体（确认为非人物）：幂等插入，已存在则忽略 */
+    public void ignoreEntity(Long workId, String entity) {
+        jdbcTemplate.update(
+                "INSERT INTO character_ignored (work_id, entity) VALUES (?, ?) " +
+                "ON CONFLICT (work_id, entity) DO NOTHING",
+                workId, entity);
+    }
+
+    /** 恢复被忽略的候选实体 */
+    public void restoreEntity(Long workId, String entity) {
+        jdbcTemplate.update(
+                "DELETE FROM character_ignored WHERE work_id = ? AND entity = ?", workId, entity);
+    }
+
+    /** 列出已忽略的实体名（供前端展示/恢复） */
+    public List<String> findIgnoredNames(Long workId) {
+        return jdbcTemplate.queryForList(
+                "SELECT entity FROM character_ignored WHERE work_id = ? ORDER BY entity",
+                String.class, workId);
+    }
+
 
     /** 更新（按 id + work_id 定位，防跨作品误改），返回受影响行数 */
     public int update(Character character) {
@@ -100,10 +142,6 @@ public class CharacterRepository {
                         "first_appear_chapter = ?, status = ? WHERE id = ? AND work_id = ?",
                 character.name(), toJson(character.aliases()), character.role(), character.ability(),
                 character.firstAppearChapter(), character.status(), character.id(), character.workId());
-    }
-
-    public int deleteById(Long id) {
-        return jdbcTemplate.update("DELETE FROM character WHERE id = ?", id);
     }
 
     private String toJson(List<String> aliases) {

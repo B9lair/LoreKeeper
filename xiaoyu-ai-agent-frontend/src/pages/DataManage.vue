@@ -64,7 +64,7 @@
       </div>
 
       <!-- 伏笔 -->
-      <div v-else class="panel-body">
+      <div v-else-if="tab === 'foreshadow'" class="panel-body">
         <div class="form-row">
           <input v-model="fContent" class="input" placeholder="伏笔内容" />
           <input v-model="fChapter" class="input" placeholder="埋设章节（可选）" style="max-width: 130px" />
@@ -83,6 +83,59 @@
               </td>
             </tr>
             <tr v-if="foreshadows.length === 0"><td colspan="4" class="empty">暂无伏笔</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 角色（人工确认回填） -->
+      <div v-else class="panel-body">
+        <div class="hint" style="margin-bottom: 12px">
+          历史章节抽取的角色没有自动同步到角色表，需人工确认哪些实体是人物再导入；导入后「别名归一」「角色检索」「角色词表」才会对旧数据生效。
+        </div>
+
+        <div v-if="candidates.length" class="import-box">
+          <div class="import-head">
+            <span>候选实体（{{ candidates.length }} 个，勾选确认是人物）</span>
+            <button type="button" class="btn sm" @click="toggleAllCandidates">全选/取消</button>
+          </div>
+          <div class="candidate-list">
+            <div v-for="c in candidates" :key="c" class="candidate-row">
+              <label class="candidate-check">
+                <input type="checkbox" v-model="checkedCandidates[c]" />
+                <span class="mono">{{ c }}</span>
+              </label>
+              <input v-model="candidateAlias[c]" class="input" placeholder="别名（可选，逗号分隔）" />
+              <button type="button" class="btn sm ghost" @click="handleIgnoreCandidate(c)">忽略</button>
+            </div>
+          </div>
+          <div class="form-row" style="margin-top: 10px">
+            <button type="button" class="btn primary" :disabled="importing" @click="handleImportCharacters">
+              {{ importing ? '导入中…' : '导入选中为角色' }}
+            </button>
+            <span v-if="importMsg" class="chip ok">{{ importMsg }}</span>
+          </div>
+          <div v-if="importError" class="error-box">{{ importError }}</div>
+        </div>
+        <div v-else class="hint">没有可导入的候选实体（可能都已导入，或作品还没有设定数据）。</div>
+
+        <div v-if="ignoredEntities.length" class="ignored-box">
+          <span class="ignored-label">已忽略（{{ ignoredEntities.length }}）</span>
+          <div class="ignored-list">
+            <span v-for="e in ignoredEntities" :key="e" class="ignored-item">
+              <span class="mono">{{ e }}</span>
+              <button type="button" class="btn sm ghost" @click="handleRestoreCandidate(e)">恢复</button>
+            </span>
+          </div>
+        </div>
+
+        <table class="table" style="margin-top: 14px">
+          <thead><tr><th>名称</th><th>别名</th></tr></thead>
+          <tbody>
+            <tr v-for="c in characters" :key="c.id">
+              <td>{{ c.name }}</td>
+              <td>{{ (c.aliases || []).join('、') || '-' }}</td>
+            </tr>
+            <tr v-if="characters.length === 0"><td colspan="2" class="empty">暂无角色</td></tr>
           </tbody>
         </table>
       </div>
@@ -166,13 +219,15 @@
 import { ref, watch } from 'vue';
 import { listSettings, saveSetting, deleteSetting } from '../api/setting';
 import { listForeshadows, createForeshadow, resolveForeshadow, deleteForeshadow } from '../api/foreshadow';
+import { listCharacters, listCharacterCandidates, backfillCharacters, listIgnoredCharacters, ignoreCharacterCandidate, restoreCharacterCandidate } from '../api/character';
 import { workStore, refreshWorks, switchTo, createAndSwitch, removeWork } from '../stores/work';
 import { updateWork } from '../api/work';
 
 const tabs = [
   { key: 'work', label: '作品' },
   { key: 'setting', label: '设定' },
-  { key: 'foreshadow', label: '伏笔' }
+  { key: 'foreshadow', label: '伏笔' },
+  { key: 'character', label: '角色' }
 ];
 
 const tab = ref('work');
@@ -195,11 +250,22 @@ const foreshadows = ref([]);
 const fContent = ref('');
 const fChapter = ref('');
 
+// 角色（人工确认回填）
+const characters = ref([]);
+const candidates = ref([]);
+const ignoredEntities = ref([]);
+const checkedCandidates = ref({});
+const candidateAlias = ref({});
+const importing = ref(false);
+const importMsg = ref('');
+const importError = ref('');
+
 const switchTab = (t) => {
   tab.value = t;
   if (t === 'work') loadWorks();
   else if (t === 'setting') loadSettings();
   else if (t === 'foreshadow') loadForeshadows();
+  else if (t === 'character') loadCharacterTab();
 };
 
 const loadWorks = async () => {
@@ -212,6 +278,33 @@ const loadSettings = async () => {
 
 const loadForeshadows = async () => {
   foreshadows.value = await listForeshadows();
+};
+
+const loadCharacters = async () => {
+  characters.value = await listCharacters();
+};
+
+const loadCandidates = async () => {
+  candidates.value = await listCharacterCandidates();
+  // 重建勾选/别名映射：保留已勾选，新增候选默认未选
+  const checked = {};
+  const alias = {};
+  candidates.value.forEach((c) => {
+    checked[c] = !!checkedCandidates.value[c];
+    alias[c] = candidateAlias.value[c] || '';
+  });
+  checkedCandidates.value = checked;
+  candidateAlias.value = alias;
+};
+
+const loadIgnored = async () => {
+  ignoredEntities.value = await listIgnoredCharacters();
+};
+
+const loadCharacterTab = async () => {
+  await loadCharacters();
+  await loadCandidates();
+  await loadIgnored();
 };
 
 const handleCreateWork = async () => {
@@ -273,6 +366,53 @@ const handleCreateForeshadow = async () => {
 const handleResolve = async (id) => {
   await resolveForeshadow(id, null);
   loadForeshadows();
+};
+
+const toggleAllCandidates = () => {
+  const allChecked = candidates.value.every((c) => checkedCandidates.value[c]);
+  candidates.value.forEach((c) => {
+    checkedCandidates.value[c] = !allChecked;
+  });
+};
+
+const handleImportCharacters = async () => {
+  const items = candidates.value
+    .filter((c) => checkedCandidates.value[c])
+    .map((c) => ({
+      name: c,
+      aliases: (candidateAlias.value[c] || '')
+        .split(/[,，、\s]+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+    }));
+  if (!items.length) return;
+  importing.value = true;
+  importMsg.value = '';
+  importError.value = '';
+  try {
+    const added = await backfillCharacters(items);
+    importMsg.value = `已导入 ${added} 个角色`;
+    checkedCandidates.value = {};
+    candidateAlias.value = {};
+    await loadCharacters();
+    await loadCandidates();
+  } catch (e) {
+    importError.value = '导入失败：' + (e.response?.data?.message || e.message || '未知错误');
+  } finally {
+    importing.value = false;
+  }
+};
+
+const handleIgnoreCandidate = async (c) => {
+  await ignoreCharacterCandidate(c);
+  await loadCandidates();
+  await loadIgnored();
+};
+
+const handleRestoreCandidate = async (e) => {
+  await restoreCharacterCandidate(e);
+  await loadCandidates();
+  await loadIgnored();
 };
 
 // 通用删除确认弹窗
@@ -367,9 +507,12 @@ watch(
   () => {
     settings.value = [];
     foreshadows.value = [];
+    characters.value = [];
+    candidates.value = [];
     loadWorks();
     if (tab.value === 'setting') loadSettings();
     else if (tab.value === 'foreshadow') loadForeshadows();
+    else if (tab.value === 'character') loadCharacterTab();
   },
   { immediate: true }
 );
@@ -523,5 +666,83 @@ watch(
   background: var(--danger-soft);
   font-size: 13px;
   line-height: 1.7;
+}
+
+.import-box {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  background: var(--bg-inset);
+}
+
+.import-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.candidate-list {
+  max-height: 240px;
+  overflow-y: auto;
+  display: grid;
+  gap: 6px;
+}
+
+.candidate-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.candidate-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.candidate-row .input {
+  max-width: 320px;
+}
+
+.ignored-box {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.ignored-label {
+  font-weight: 600;
+}
+
+.ignored-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ignored-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-inset);
+}
+
+.ignored-item .btn {
+  font-size: 12px;
+  padding: 1px 6px;
 }
 </style>

@@ -14,7 +14,7 @@
 | **检索层** | ✅ `RagEvaluator`（`Recall@K` / `MRR`） | 缺 `Context Precision`（纯度）、`Context Relevance`（语义相关度） |
 | **归因层** | ❌ 完全没有 | 新增 **`Faithfulness`**（最重要，直接量化"答案有没有依据"） |
 | **回答层** | ❌ 完全没有 | 新增 `Answer Relevancy` / `Answer Accuracy` |
-| **Agent 层** | ⚠️ 有机制（防死循环、意图路由）但**无评测** | 新增 `Intent Accuracy` / `Tool Call Accuracy` / `Agent Goal Accuracy` |
+| **Agent 层** | ⚠️ 有机制（防死循环、统一 Agent 自主规划）但**无评测** | 新增 `Tool Call Accuracy` / `Agent Goal Accuracy` |
 
 一句话：**现有评测覆盖了"检索"和"抽取/归并"两个确定性环节，漏掉了"最终答案质量"和"Agent 行为"这两个最贴近用户、也最易被幻觉钻空子的环节。**
 
@@ -31,7 +31,6 @@
 | 归因 | `Faithfulness` | **新增（核心）** | LLM-as-judge | claim ↔ 检索上下文 |
 | 回答 | `Answer Relevancy` | 新增 | LLM-as-judge | 回答 ↔ question |
 | 回答 | `Answer Accuracy` | 新增（有 reference 才上） | LLM-as-judge | 回答 ↔ reference_answer |
-| Agent | `Intent Accuracy` | 新增 | 运行器 | `RouteResult.intent` ↔ 标注 |
 | Agent | `Tool Call Accuracy` | 新增 | 运行器 | 实际工具序列 ↔ `expectedTools` |
 | Agent | `Agent Goal Accuracy` | 新增 | 运行器 | 最终回答 ↔ `successCriteria` |
 | 工程 | 延迟 / loopGuard 触发率 / maxSteps 耗尽率 | 新增（运营侧） | 日志埋点 | `ToolCallAgent` 已有状态 |
@@ -55,7 +54,6 @@ public record EvalDataset(
         List<ConsistencyCase> consistency,
         List<ExtractionCase> extraction,
         List<QaCase> qa,          // 新增：端到端问答（归因层 + 回答层）
-        List<IntentCase> intent,  // 新增：意图路由
         List<AgentCase> agent     // 新增：Agent 工具调用
 ) {
     /** 端到端问答样本：question/reference/golden_facts/bad_cases */
@@ -67,9 +65,6 @@ public record EvalDataset(
             List<String> badCases,           // 不该出现的幻觉点
             String difficulty               // easy|medium|hard
     ) {}
-
-    /** 意图路由样本 */
-    public record IntentCase(String message, String expectedIntent) {}
 
     /** Agent 样本：expected_tools + success_criteria */
     public record AgentCase(
@@ -92,10 +87,6 @@ public record EvalDataset(
     "badCases": ["右手", "剑修"],
     "difficulty": "easy"
   }
-],
-"intent": [
-  { "message": "主角的师父是谁", "expectedIntent": "QUERY" },
-  { "message": "帮我写第 50 章", "expectedIntent": "WRITE" }
 ],
 "agent": [
   { "question": "女二的佩剑叫什么", "expectedTools": ["settingSearch"], "successCriteria": "答案含「青霜」" }
@@ -124,13 +115,12 @@ public double contextPrecisionAtK(List<String> retrievedIds, List<String> expect
 public record AgentEvaluator() {
     public record ToolMetrics(double precision, double recall, double f1) {}
     public ToolMetrics toolCallF1(Set<String> expected, Set<String> actual) { /* ... */ }
-    public double intentAccuracy(List<String> predicted, List<String> expected) { /* ... */ }
 }
 ```
 
 ### 4.2 LLM-as-judge（归因层 + 回答层核心）
 
-项目已有 DashScope `qwen-max`，`IntentRouter` 已示范 `ChatClient.entity(Xxx.class)` 结构化输出，照抄该模式：
+项目已有 DashScope `qwen-max`，`EntityExtractor` 已示范 `ChatClient.entity(Xxx.class)` 结构化输出，照抄该模式：
 
 ```java
 @Component
@@ -167,7 +157,7 @@ public class LlmJudgeService {
 
 ### 4.3 运行器（真连 DB/LLM，`@Disabled` 隔离）
 
-新增 `QaEvalRunnerTest`：灌种子 → 每 `QaCase` 走真实链路（`IntentRouter` → `LoreAgentFactory` → `ToolCallAgent`）拿最终回答 + 检索上下文 → 调 `LlmJudgeService` 打分 → 汇总 F1/平均分。默认 `@Disabled`，不进 CI。
+新增 `QaEvalRunnerTest`：灌种子 → 每 `QaCase` 走真实链路（`LoreAgentFactory` → `ToolCallAgent`）拿最终回答 + 检索上下文 → 调 `LlmJudgeService` 打分 → 汇总 F1/平均分。默认 `@Disabled`，不进 CI。
 
 ---
 
@@ -201,13 +191,13 @@ public class LlmJudgeService {
 
 | 编号 | 任务 | 交付物 | 优先级 | 工作量 | 验收标准 |
 |---|---|---|---|---|---|
-| 3.1 | `dataset.json` 新增 `intent` / `agent` 样本 | golden 集扩充 | P2 | 0.5 天 | 各 ≥ 5 条样本 |
-| 3.2 | 新增 `AgentEvaluator`（工具 F1 + 意图准确率） | 纯函数 + 单测 | P2 | 0.5 天 | `mvn test` 通过 |
-| 3.3 | 新增 `IntentEvalRunnerTest` / `AgentEvalRunnerTest` | 运行器 | P2 | 1 天 | 输出 Intent Accuracy、Tool Call F1、Goal Accuracy |
+| 3.1 | `dataset.json` 新增 `agent` 样本 | golden 集扩充 | P2 | 0.5 天 | ≥ 5 条样本 |
+| 3.2 | 新增 `AgentEvaluator`（工具 F1） | 纯函数 + 单测 | P2 | 0.5 天 | `mvn test` 通过 |
+| 3.3 | 新增 `AgentEvalRunnerTest` | 运行器 | P2 | 1 天 | 输出 Tool Call F1、Goal Accuracy |
 | 3.4 | `ToolCallAgent` 埋点：loopGuard 触发/步数/耗时 | 日志埋点 | P2 | 0.5 天 | 可统计 loopGuard 触发率、maxSteps 耗尽率 |
 | 3.5 | `eval_trace` 落库 + 线上失败样本回灌 | 采集 + 回灌机制 | P2 | 1 天 | 真实问答落表，坏样本回灌成 `badCases` |
 
-**阶段三里程碑 ✅ 达成**：新增 `AgentEvaluator`（工具 F1 + 意图准确率）、`IntentEvalRunnerTest` / `AgentEvalRunnerTest`、`ToolCallAgent` 埋点（工具序列/loopGuard/步数/耗时）、`EvalTraceRepository` + `onFinish` 落表 hook。评测从"模型评测"升级到"产品质量评测"；`eval_trace` 落表 + `findRecent` 支撑人工抽检回灌（自动化回灌工具未做，属运营流程）。
+**阶段三里程碑 ✅ 达成**：新增 `AgentEvaluator`（工具 F1）、`AgentEvalRunnerTest`、`ToolCallAgent` 埋点（工具序列/loopGuard/步数/耗时）、`EvalTraceRepository` + `onFinish` 落表 hook。评测从"模型评测"升级到"产品质量评测"；`eval_trace` 落表 + `findRecent` 支撑人工抽检回灌（自动化回灌工具未做，属运营流程）。
 
 ### 排期总览
 
@@ -224,9 +214,9 @@ public class LlmJudgeService {
 ## 6. 注意事项（结合项目既有约束）
 
 1. **LLM-as-judge 随机性**：`qwen-max` 做 judge 也随机，`temperature=0` 且每样本跑 2~3 次取均值，或对 judge 结果人工抽检校准（离线 + 线上 + 人工抽检三者结合）。
-2. **保持"确定性环节不进 LLM"既有原则**：`Intent Accuracy` 的 `expectedIntent` 确定，但 `IntentRouter.route()` 依赖 LLM → 属运行器，不塞进 CI。
+2. **保持"确定性环节不进 LLM"既有原则**：`toolCallF1` 的 `expectedTools` 确定，但实际工具序列依赖 LLM → 属运行器，不塞进 CI。
 3. **`goldenContextIds` 与 `goldenFacts` 不混用**：前者归检索层（`Recall@K`），后者归归因层（判 claim 覆盖）——混用即失去定位能力。
-4. **失败样本回灌**：现有 SSE 事件流（`intent`/`tool`/`answer`/`error`）可支撑 `eval_trace` 落库，线上坏样本回灌 `badCases`。
+4. **失败样本回灌**：现有 SSE 事件流（`tool`/`answer`/`error`）可支撑 `eval_trace` 落库，线上坏样本回灌 `badCases`。
 5. **复用 `evidence` 字段**：设定四元组本有 `evidence` 原文依据，judge 时一并喂入，显著提高归因判定准确性，天然支撑后续 `Citation Precision/Coverage`。
 
 ---
@@ -238,7 +228,6 @@ CREATE TABLE IF NOT EXISTS eval_trace (
     id            bigserial PRIMARY KEY,
     work_id       bigint,
     user_message  text,
-    intent        text,
     tool_sequence text,          -- JSON 数组：["settingSearch","doTerminate"]
     answer        text,
     loop_guard    boolean,        -- 是否触发防死循环
@@ -248,13 +237,15 @@ CREATE TABLE IF NOT EXISTS eval_trace (
 );
 ```
 
+> ⚠️ 2026-10-29 统一 Agent 迁移后移除 `intent` 列（意图路由已废弃）。若线上表仍含旧列，需手动执行：`ALTER TABLE eval_trace DROP COLUMN IF EXISTS intent;`
+
 ---
 
 ## 8. 下一步
 
 阶段一、二、三已全部落地（截至 2026-10-28）。剩余可选事项：
 
-- **真连复测**：手动删 `@Disabled` 跑 `QaEvalRunnerTest` / `IntentEvalRunnerTest` / `AgentEvalRunnerTest`，固化三套指标实测值进 README（当前纯函数单测全绿，真连指标仅阶段一 QA 有实测值）。
+- **真连复测**：手动删 `@Disabled` 跑 `QaEvalRunnerTest` / `AgentEvalRunnerTest`，固化两套指标实测值进 README（当前纯函数单测全绿，真连指标仅阶段一 QA 有实测值）。
 - **评测集扩充**：补难样本（语义等价、多跳、跨章矛盾）。现有 10 条 QA 偏浅，首次全满分已暴露「设定直接命中、无幻觉样本」的区分度不足。
 - **线上回灌闭环**：`eval_trace` 已落表，运营侧人工抽检坏样本 → 回灌 `dataset.json` 的 `badCases`；可进一步做「自动回灌工具」或「评测报告面板」。
 - **Citation Precision/Coverage**：复用设定四元组的 `evidence` 字段，给回答加出处标注后评测引用质量（第 6 节第 5 条）。
@@ -297,5 +288,19 @@ CREATE TABLE IF NOT EXISTS eval_trace (
 
 ### 9.5 阶段三 Agent 层（`AgentEvaluator` / 运行器）
 
-- `AgentEvaluator`（工具 F1 + 意图准确率）纯函数单测通过（10 用例，进 CI）；
-- 真连：**Intent Accuracy = 1.0000（6/6）**、**Tool Call F1 = 1.0000（平均）**、**Goal Accuracy = 1.0000（5/5）**。
+- `AgentEvaluator`（工具 F1）纯函数单测通过（6 用例，进 CI）；
+- 真连：**Tool Call F1 = 1.0000（平均）**、**Goal Accuracy = 1.0000（5/5）**。
+
+### 9.6 统一 Agent 迁移后验证（2026-10-29）
+
+意图路由（`IntentRouter`）与 `Intent Accuracy` 已随统一 Agent 方案废弃移除（`AgentEvaluator.intentAccuracy`、`IntentEvalRunnerTest`、`EvalDataset.IntentCase`、`dataset.json` 的 `intent` 段均已删除）。迁移后纯函数单测全绿：
+
+| 测试类 | 通过 | 说明 |
+| --- | --- | --- |
+| `AgentEvaluatorTest` | 6/6 | 仅剩 `toolCallF1` 用例 |
+| `ConsistencyEvaluatorTest` | 4/4 | 归并判定评测器 |
+| `EvalDatasetLoaderTest` | 1/1 | `dataset.json` 反序列化为 5 类样本（已无 intent 段） |
+| `RagEvaluatorTest` | 7/7 | 检索评测器 |
+| `ScoreAggregatorTest` | 12/12 | 加权总分聚合器 |
+
+合计 **30/30 通过**（`mvnw.cmd -Dtest=RagEvaluatorTest,ConsistencyEvaluatorTest,AgentEvaluatorTest,ScoreAggregatorTest,EvalDatasetLoaderTest test`，BUILD SUCCESS）。

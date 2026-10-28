@@ -1,6 +1,7 @@
 package com.xiaoyu.aiaigent.lore;
 
 import com.xiaoyu.aiaigent.rag.ChunkingService;
+import com.xiaoyu.aiaigent.repository.CharacterRepository;
 import com.xiaoyu.aiaigent.repository.WorldSettingRepository;
 import com.xiaoyu.aiaigent.repository.WorldSettingRepository.WorldSetting;
 import org.slf4j.Logger;
@@ -9,6 +10,7 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -32,17 +34,20 @@ public class SettingService {
     private final VectorStore vectorStore;
     private final JdbcTemplate jdbcTemplate;
     private final ConflictScanService conflictScanService;
+    private final CharacterRepository characterRepository;
 
     public SettingService(WorldSettingRepository worldSettingRepository,
                           ChunkingService chunkingService,
                           VectorStore vectorStore,
                           JdbcTemplate jdbcTemplate,
-                          ConflictScanService conflictScanService) {
+                          ConflictScanService conflictScanService,
+                          CharacterRepository characterRepository) {
         this.worldSettingRepository = worldSettingRepository;
         this.chunkingService = chunkingService;
         this.vectorStore = vectorStore;
         this.jdbcTemplate = jdbcTemplate;
         this.conflictScanService = conflictScanService;
+        this.characterRepository = characterRepository;
     }
 
     public List<WorldSetting> list(long workId) {
@@ -56,7 +61,9 @@ public class SettingService {
         String entity = req.entity().trim();
         String attribute = req.attribute().trim();
         String value = req.value().trim();
-        String type = isBlank(req.type()) ? "rule" : req.type().trim();
+        String type = isBlank(req.type())
+                ? (characterRepository.findByNameOrAlias(workId, entity).isPresent() ? "person" : "rule")
+                : req.type().trim();
         String content = entity + " 的 " + attribute + "：" + value;
 
         long id;
@@ -91,17 +98,18 @@ public class SettingService {
         return new SettingSaveResult(id, version, conflicts);
     }
 
+    @Transactional
     public void delete(long workId, long id) {
         int rows = worldSettingRepository.deleteById(id, workId);
         if (rows == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "设定不存在或不属于当前作品");
         }
-        removeSettingIndex(id);
+        removeSettingIndex(workId, id);
     }
 
     /** 重建索引：先删旧索引，再写新索引 */
     private void reindexSetting(long workId, long settingId, Integer chapterNo, String content) {
-        removeSettingIndex(settingId);
+        removeSettingIndex(workId, settingId);
         int no = chapterNo == null ? 0 : chapterNo;
         try {
             vectorStore.add(List.of(
@@ -112,11 +120,11 @@ public class SettingService {
         }
     }
 
-    /** 删除索引：按 entityId + type 精确删除（entityId 存的是字符串） */
-    private void removeSettingIndex(long settingId) {
+    /** 删除索引：按 workId + entityId + type 精确删除（entityId 存的是字符串） */
+    private void removeSettingIndex(long workId, long settingId) {
         jdbcTemplate.update(
-                "DELETE FROM vector_store WHERE metadata ->> 'type' = 'setting' AND metadata ->> 'entityId' = ?",
-                String.valueOf(settingId));
+                "DELETE FROM vector_store WHERE metadata ->> 'workId' = ? AND metadata ->> 'type' = 'setting' AND metadata ->> 'entityId' = ?",
+                String.valueOf(workId), String.valueOf(settingId));
     }
 
     private static boolean isBlank(String s) {

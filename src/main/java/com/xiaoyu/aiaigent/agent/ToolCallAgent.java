@@ -224,7 +224,6 @@ public class ToolCallAgent extends ReActAgent{
             evalTraceRepository.save(new EvalTraceRepository.EvalTrace(
                     getWorkId(),
                     userPrompt,
-                    getIntent(),
                     ModelOptionsUtils.toJsonString(toolCallSequence),
                     getLastAnswer(),
                     loopGuardTriggered,

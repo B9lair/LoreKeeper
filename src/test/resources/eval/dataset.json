@@ -145,14 +145,6 @@
       "difficulty": "easy"
     }
   ],
-  "intent": [
-    { "message": "主角的师父是谁", "expectedIntent": "QUERY" },
-    { "message": "帮我写第50章", "expectedIntent": "WRITE" },
-    { "message": "审查一下我刚写的这一章有没有矛盾", "expectedIntent": "REVIEW" },
-    { "message": "我埋的那些伏笔现在回收了几个", "expectedIntent": "FORESHADOW" },
-    { "message": "今天天气怎么样", "expectedIntent": "CHAT" },
-    { "message": "女二的佩剑叫什么名字", "expectedIntent": "QUERY" }
-  ],
   "agent": [
     {
       "question": "女二的佩剑叫什么名字？",

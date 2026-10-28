@@ -9,7 +9,7 @@ import java.util.Set;
  * 评测集数据模型（对应 src/test/resources/eval/dataset.json）。
  * <p>
  * - seed：统一测试语料（种子数据），既构造评测集又做演示
- * - rag / consistency / extraction / qa / intent / agent：六类 golden 样本
+ * - rag / consistency / extraction / qa / agent：五类 golden 样本
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record EvalDataset(
@@ -18,7 +18,6 @@ public record EvalDataset(
         List<ConsistencyCase> consistency,
         List<ExtractionCase> extraction,
         List<QaCase> qa,
-        List<IntentCase> intent,
         List<AgentCase> agent
 ) {
 
@@ -61,10 +60,6 @@ public record EvalDataset(
             List<String> badCases,
             String difficulty
     ) {
-    }
-
-    /** 意图路由样本：message 用户输入，expectedIntent 标注意图（WRITE/REVIEW/QUERY/FORESHADOW/CHAT） */
-    public record IntentCase(String message, String expectedIntent) {
     }
 
     /** Agent 工具调用样本：expectedTools 期望调用的业务工具（不含 doTerminate 流程工具），successCriteria 目标达成判据 */

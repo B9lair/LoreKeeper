@@ -284,14 +284,14 @@ const handleUpload = async () => {
   uploadResult.value = '';
   try {
     if (hasFiles) {
-      // 批量：顺序逐个上传（单文件可整本切多章，逐章入库；失败隔离，进度可展示）
+      // 批量：顺序逐个上传（每个文件整本作为一章入库；失败隔离，进度可展示）
       const results = [];
       for (let i = 0; i < files.value.length; i++) {
         const f = files.value[i];
         const title = f.name.replace(/\.[^.]+$/, '');
         const r = await uploadChapterFile(f.file, title);
         results.push(
-          `「${f.name}」：切分 ${r.chapterCount} 章 · 新增设定 ${r.totalNewSettings} · 追加 ${r.totalUpdatedSettings} · 冲突 ${r.totalConflicts} · 伏笔 ${r.totalForeshadows}`
+          `「${f.name}」：入库 ${r.chapterCount} 章 · 新增设定 ${r.totalNewSettings} · 追加 ${r.totalUpdatedSettings} · 冲突 ${r.totalConflicts} · 伏笔 ${r.totalForeshadows}`
         );
         uploadResult.value = `已上传 ${i + 1}/${files.value.length} …`;
       }

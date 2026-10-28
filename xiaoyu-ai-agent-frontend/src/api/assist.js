@@ -6,8 +6,7 @@ const apiBase = () =>
 
 /**
  * 启动一次创作助手流式请求（SSE 带 JWT，命名事件分流）。
- * 后端 /ai/lore/chat 契约：
- *   event:intent → onIntent(data) 路由出的意图（WRITE/REVIEW/QUERY/FORESHADOW/CHAT，一条，最先）
+ * 后端 /ai/lore/chat 契约（统一 Agent，无意图路由）：
  *   event:tool   → onTool(data)   每步 Agent 工具执行结果（多条）
  *   event:answer → onAnswer(data) 最终回答（设定提示卡，一条）
  *   event:error  → onError(err)   业务错误
@@ -15,7 +14,7 @@ const apiBase = () =>
  *
  * @returns {AbortController|null} 供「停止」使用；未登录返回 null
  */
-export function streamAssist(message, { onIntent, onTool, onAnswer, onError, onDone }, chatId) {
+export function streamAssist(message, { onTool, onAnswer, onError, onDone }, chatId) {
   const auth = readAuth();
   if (!auth || !auth.token) {
     onError(new Error('未登录，请先登录'));
@@ -40,7 +39,7 @@ export function streamAssist(message, { onIntent, onTool, onAnswer, onError, onD
     },
     signal: ctrl.signal,
     // 连接建立后校验 HTTP 状态与 Content-Type；非 2xx / 非 SSE 直接抛错
-    // （兜住「意图路由 LLM 挂 → 500」这类连接前就失败的情况）
+    // （兜住「后端异常 → 500」这类连接前就失败的情况）
     async onopen(response) {
       if (response.ok && (response.headers.get('content-type') || '').includes('text/event-stream')) {
         return;
@@ -48,8 +47,7 @@ export function streamAssist(message, { onIntent, onTool, onAnswer, onError, onD
       throw new Error(`连接失败：HTTP ${response.status}`);
     },
     onmessage(ev) {
-      if (ev.event === 'intent') onIntent?.(ev.data);
-      else if (ev.event === 'tool') onTool(ev.data);
+      if (ev.event === 'tool') onTool(ev.data);
       else if (ev.event === 'answer') onAnswer(ev.data);
       else if (ev.event === 'error') onError(new Error(ev.data));
       // 其余未知事件忽略
@@ -60,8 +58,8 @@ export function streamAssist(message, { onIntent, onTool, onAnswer, onError, onD
       throw new Error('sse-stream-ended');
     },
     onerror(err) {
-      if (finished) {
-        // 流已正常结束，这里的异常只是「阻止重连」的副作用，静默停止
+      if (finished || ctrl.signal.aborted) {
+        // 流已正常结束 / 用户主动停止：这里的异常只是「阻止重连或中断」的副作用，静默停止
         throw err;
       }
       onError(err);

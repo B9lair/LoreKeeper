@@ -10,7 +10,7 @@ import java.util.List;
 /**
  * LLM-as-Judge：对 RAG 最终回答做归因层（Faithfulness）与回答层（Relevancy/Accuracy）打分。
  * <p>
- * 复用项目「结构化输出」模式（同 IntentRouter / EntityExtractor 的 .entity(Xxx.class)）。
+ * 复用项目「结构化输出」模式（同 EntityExtractor 的 .entity(Xxx.class)）。
  * 评测结果随机、慢、费 key，仅由 QaEvalRunnerTest（@Disabled）真连调用，不进常规 CI。
  */
 @Slf4j

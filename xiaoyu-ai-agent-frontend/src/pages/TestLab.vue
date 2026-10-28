@@ -8,21 +8,10 @@
         <div class="panel-head">
           <span class="panel-title">MCP 工具测试</span>
           <span class="panel-sub">
-            <span class="chip" :class="mcp?.docParser ? 'ok' : 'danger'">doc-parser {{ mcp?.docParser ? '●' : '○' }}</span>
             <span class="chip" :class="mcp?.database ? 'ok' : 'danger'">database {{ mcp?.database ? '●' : '○' }}</span>
           </span>
         </div>
         <div class="panel-body">
-          <div class="test-block">
-            <div class="block-title mono">parse_document</div>
-            <div class="block-row">
-              <input v-model="parsePath" class="input" placeholder="文件绝对路径，如 D:/novel/chapter1.txt" />
-              <button type="button" class="btn primary sm" :disabled="parseLoading" @click="runParse">解析</button>
-            </div>
-            <pre v-if="parseResult" class="out">{{ parseResult }}</pre>
-            <div v-if="parseError" class="error-box">{{ parseError }}</div>
-          </div>
-
           <div class="test-block">
             <div class="block-title mono">query_database</div>
             <div class="block-row">
@@ -35,37 +24,6 @@
             </div>
             <pre v-if="queryResult" class="out">{{ queryResult }}</pre>
             <div v-if="queryError" class="error-box">{{ queryError }}</div>
-          </div>
-
-          <div class="test-block">
-            <div class="block-title mono">split_chapters</div>
-            <div class="block-row">
-              <input v-model="splitText" class="input" placeholder="粘贴全文，按「第X章/Chapter X」切分" />
-              <button type="button" class="btn primary sm" :disabled="splitLoading" @click="runSplit">切分</button>
-            </div>
-            <pre v-if="splitResult" class="out">{{ splitResult }}</pre>
-            <div v-if="splitError" class="error-box">{{ splitError }}</div>
-          </div>
-
-          <div class="test-block">
-            <div class="block-title mono">parse_document_content</div>
-            <div class="block-row">
-              <input v-model="contentFileName" class="input" placeholder="文件名，如 chapter.txt" />
-              <input v-model="contentB64" class="input" placeholder="base64 内容" />
-              <button type="button" class="btn primary sm" :disabled="contentLoading" @click="runParseContent">解析</button>
-            </div>
-            <pre v-if="contentResult" class="out">{{ contentResult }}</pre>
-            <div v-if="contentError" class="error-box">{{ contentError }}</div>
-          </div>
-
-          <div class="test-block">
-            <div class="block-title mono">detect_encoding</div>
-            <div class="block-row">
-              <input v-model="encodingB64" class="input" placeholder="base64 内容" />
-              <button type="button" class="btn primary sm" :disabled="encodingLoading" @click="runEncoding">探测</button>
-            </div>
-            <pre v-if="encodingResult" class="out">{{ encodingResult }}</pre>
-            <div v-if="encodingError" class="error-box">{{ encodingError }}</div>
           </div>
         </div>
       </section>
@@ -97,63 +55,25 @@
       </section>
     </div>
 
-    <!-- 卡片 3：意图路由测试 -->
-    <section class="panel card">
-      <div class="panel-head">
-        <span class="panel-title">意图路由测试</span>
-      </div>
-      <div class="panel-body">
-        <div class="block-row">
-          <input v-model="intentMsg" class="input" placeholder="输入一句话，如：审查这一章" @keydown.enter="runIntent" />
-          <button type="button" class="btn primary sm" :disabled="intentLoading" @click="runIntent">
-            {{ intentLoading ? '识别中…' : '识别' }}
-          </button>
-        </div>
-        <div v-if="intentResult" class="intent-result">
-          <span class="hint">识别结果：</span>
-          <span class="intent-badge" :class="intentCls(intentResult)">
-            <span class="dot" aria-hidden="true"></span>{{ intentLabel(intentResult) }} · {{ intentResult }}
-          </span>
-        </div>
-      </div>
-    </section>
   </div>
 </template>
 
 <script setup>
 import { onMounted, ref, watch } from 'vue';
-import { debugIntent, mcpStatus, mcpParse, mcpQuery, mcpSplit, mcpEncoding, mcpParseContent } from '../api/debug';
+import { mcpStatus, mcpQuery } from '../api/debug';
 import { searchRag } from '../api/rag';
-import { intentLabel, intentCls } from '../utils/intent';
 import { workStore } from '../stores/work';
 
 const tables = ['character', 'world_setting', 'timeline_event', 'foreshadow'];
 
 // MCP
 const mcp = ref(null);
-const parsePath = ref('');
-const parseResult = ref('');
-const parseError = ref('');
-const parseLoading = ref(false);
 const queryTable = ref('world_setting');
 const queryFields = ref('');
 const queryConditions = ref('');
 const queryResult = ref('');
 const queryError = ref('');
 const queryLoading = ref(false);
-const splitText = ref('');
-const splitResult = ref('');
-const splitError = ref('');
-const splitLoading = ref(false);
-const contentFileName = ref('');
-const contentB64 = ref('');
-const contentResult = ref('');
-const contentError = ref('');
-const contentLoading = ref(false);
-const encodingB64 = ref('');
-const encodingResult = ref('');
-const encodingError = ref('');
-const encodingLoading = ref(false);
 
 // RAG
 const ragQuery = ref('');
@@ -161,31 +81,11 @@ const ragTopK = ref(3);
 const ragHits = ref([]);
 const ragLoading = ref(false);
 
-// 意图
-const intentMsg = ref('');
-const intentResult = ref(null);
-const intentLoading = ref(false);
-
 const loadStatus = async () => {
   try {
     mcp.value = await mcpStatus();
   } catch (e) {
-    mcp.value = { docParser: false, database: false };
-  }
-};
-
-const runParse = async () => {
-  if (!parsePath.value.trim()) return;
-  parseLoading.value = true;
-  parseResult.value = '';
-  parseError.value = '';
-  try {
-    const r = await mcpParse(parsePath.value.trim());
-    parseResult.value = r.result || r.error || '';
-  } catch (e) {
-    parseError.value = '解析失败：' + (e.message || '未知错误');
-  } finally {
-    parseLoading.value = false;
+    mcp.value = { database: false };
   }
 };
 
@@ -203,51 +103,6 @@ const runQuery = async () => {
   }
 };
 
-const runSplit = async () => {
-  if (!splitText.value.trim()) return;
-  splitLoading.value = true;
-  splitResult.value = '';
-  splitError.value = '';
-  try {
-    const r = await mcpSplit(splitText.value.trim());
-    splitResult.value = JSON.stringify(r.chapters, null, 2) || '';
-  } catch (e) {
-    splitError.value = '切分失败：' + (e.message || '未知错误');
-  } finally {
-    splitLoading.value = false;
-  }
-};
-
-const runParseContent = async () => {
-  if (!contentB64.value.trim()) return;
-  contentLoading.value = true;
-  contentResult.value = '';
-  contentError.value = '';
-  try {
-    const r = await mcpParseContent(contentFileName.value.trim(), contentB64.value.trim());
-    contentResult.value = r.result || r.error || '';
-  } catch (e) {
-    contentError.value = '解析失败：' + (e.message || '未知错误');
-  } finally {
-    contentLoading.value = false;
-  }
-};
-
-const runEncoding = async () => {
-  if (!encodingB64.value.trim()) return;
-  encodingLoading.value = true;
-  encodingResult.value = '';
-  encodingError.value = '';
-  try {
-    const r = await mcpEncoding(encodingB64.value.trim());
-    encodingResult.value = r.encoding || r.error || '';
-  } catch (e) {
-    encodingError.value = '探测失败：' + (e.message || '未知错误');
-  } finally {
-    encodingLoading.value = false;
-  }
-};
-
 const runRag = async () => {
   if (!ragQuery.value.trim()) return;
   ragLoading.value = true;
@@ -260,27 +115,13 @@ const runRag = async () => {
   }
 };
 
-const runIntent = async () => {
-  if (!intentMsg.value.trim()) return;
-  intentLoading.value = true;
-  try {
-    const r = await debugIntent(intentMsg.value.trim());
-    intentResult.value = r.intent;
-  } finally {
-    intentLoading.value = false;
-  }
-};
-
 onMounted(loadStatus);
 
 // 切换作品：清空测试结果缓存，重拉 MCP 状态
 watch(() => workStore.version, () => {
-  parseResult.value = '';
-  parseError.value = '';
   queryResult.value = '';
   queryError.value = '';
   ragHits.value = [];
-  intentResult.value = null;
   loadStatus();
 });
 </script>
@@ -401,10 +242,4 @@ watch(() => workStore.version, () => {
   word-break: break-all;
 }
 
-.intent-result {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-}
 </style>

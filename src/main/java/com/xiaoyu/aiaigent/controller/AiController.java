@@ -2,65 +2,22 @@ package com.xiaoyu.aiaigent.controller;
 
 import com.xiaoyu.aiaigent.agent.LoreAgentFactory;
 import com.xiaoyu.aiaigent.agent.ToolCallAgent;
-import com.xiaoyu.aiaigent.app.LoreKeeper;
 import com.xiaoyu.aiaigent.common.TenantContext;
 import jakarta.annotation.Resource;
-import org.springframework.http.MediaType;
-import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-import reactor.core.publisher.Flux;
-
-import java.io.IOException;
 
 @RestController
 @RequestMapping("/ai")
 public class AiController {
 
     @Resource
-    private LoreKeeper loreKeeper;
-
-    @Resource
     private LoreAgentFactory loreAgentFactory;
 
-    @GetMapping("/lore/chat/sync")
-    public String doChatWithLoreSync(String message, String chatId) {
-        return loreKeeper.doChat(message, chatId);
-    }
-
-    @GetMapping(value = "/lore/chat/sse", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<String> doChatWithLoreSSE(String message, String chatId) {
-        return loreKeeper.doChatByStream(message, chatId);
-    }
-
-    @GetMapping(value = "/lore/chat/sse")
-    public Flux<ServerSentEvent<String>> doChatWithLoreServerSentEvent(String message, String chatId) {
-        return loreKeeper.doChatByStream(message, chatId)
-                .map(chunk -> ServerSentEvent.<String>builder().data(chunk).build());
-    }
-
-    @GetMapping("/lore/chat/sse/emitter")
-    public SseEmitter doChatWithLoreSseEmitter(String message, String chatId) {
-        SseEmitter emitter = new SseEmitter(180000L);
-        loreKeeper.doChatByStream(message, chatId)
-                .subscribe(
-                        chunk -> {
-                            try {
-                                emitter.send(chunk);
-                            } catch (IOException e) {
-                                emitter.completeWithError(e);
-                            }
-                        },
-                        emitter::completeWithError,
-                        emitter::complete
-                );
-        return emitter;
-    }
-
     /**
-     * 统一入口：意图路由 + 配置 Agent
+     * 统一入口：配置统一 Agent（无意图路由），SSE 流式返回。
      */
     @GetMapping("/lore/chat")
     public SseEmitter doChatWithLore(String message, String chatId) {

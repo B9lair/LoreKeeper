@@ -50,7 +50,6 @@ lorekeeper:
   chat-memory-dir: ${user.dir}/chat-memory
   mcp:
     # MCP Server 地址；未启动时懒连接失败会降级，不影响主应用启动
-    doc-parser-url: http://localhost:8124
     database-url: http://localhost:8125
 
 rag:

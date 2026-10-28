@@ -55,9 +55,6 @@ public abstract class BaseAgent {
     // 最终回答（think 产生纯文本回答 / act 检测到 doTerminate 时由子类填充，供 runstream 发送 event:answer）
     private String lastAnswer;
 
-    // 意图（由调用方在 runstream 前设置，供 runstream 发送 event:intent；可空）
-    private String intent;
-
     // 会话记忆（可为空；为空则不启用多轮记忆）
     private ChatMemory chatMemory;
 
@@ -158,11 +155,6 @@ public abstract class BaseAgent {
                 this.startedAt = System.currentTimeMillis();
                 // 记录消息上下文（先注入历史记忆，再追加本轮用户输入）
                 injectHistory(userPrompt);
-
-                // 发送意图事件（命名事件 intent，前端据此渲染意图徽章；未设置则跳过）
-                if (!StringUtil.isBlank(intent)) {
-                    if (!safeSend(emitter, "intent", intent)) return;
-                }
 
                 // 执行循环
                 try {

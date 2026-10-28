@@ -113,3 +113,14 @@ ALTER TABLE public.work
 ALTER TABLE public.work
     ADD COLUMN IF NOT EXISTS intro TEXT,
     ADD COLUMN IF NOT EXISTS author VARCHAR(100);
+
+-- ==================== 角色回填：候选忽略表 ====================
+-- 记录「被确认为非人物、从候选列表中忽略」的实体名（只影响候选展示，不删 world_setting 设定）
+CREATE TABLE IF NOT EXISTS character_ignored (
+    id BIGSERIAL PRIMARY KEY,
+    work_id BIGINT REFERENCES work(id),
+    entity VARCHAR(200) NOT NULL,
+    created_at TIMESTAMP DEFAULT now(),
+    CONSTRAINT uq_character_ignored UNIQUE (work_id, entity)
+);
+

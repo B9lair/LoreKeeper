@@ -48,7 +48,6 @@ lorekeeper:
   # 对话记忆文件存储目录（FileBasedChatMemory）
   chat-memory-dir: ${user.dir}/chat-memory
   mcp:
-    doc-parser-url: http://localhost:8124
     database-url: http://localhost:8125
 
 rag:

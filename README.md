@@ -1,12 +1,12 @@
 # LoreKeeper · 网文设定守护者
 
-> 一个面向长篇连载场景的 **AI Agent 应用**：用「意图路由 + ReAct 自主规划 + Agentic RAG + MCP 工具生态」把「设定一致性」这件高度依赖人工记忆的事，变成可检索、可推理、可审查、可人机协同的闭环。
+> 一个面向长篇连载场景的 **AI Agent 应用**：用「统一 Agent（ReAct 自主规划）+ Agentic RAG + MCP 工具生态」把「设定一致性」这件高度依赖人工记忆的事，变成可检索、可推理、可审查、可追溯的闭环。
 
 **技术标签**：`Java 21` `Spring Boot 3.5` `Spring AI (M6)` `ReAct Agent` `MCP` `RAG` `pgvector` `Hybrid Search / RRF / Rerank` `多租户隔离` `Vue 3 + Vite` `SSE 流式`
 
-![对话台：意图路由徽章 + Agent 工具调用轨迹 + Inspector 过程面板](docs/screenshots/01-chat.png)
+![对话台：统一 Agent 工具调用轨迹 + Inspector 过程面板](docs/screenshots/01-chat.png)
 
-> **对话台**：左侧多会话记忆，中间意图路由徽章（世界观问答 · QUERY）与 Agent 过程（2 步），右侧 **Inspector** 实时展示工具调用 Trace —— `Step 1 · settingSearch`（RAG 检索，带命中片段）→ `Step 2 · doTerminate`（终止协议）。Agent 的每一步决策都可见、可追溯。
+> **对话台**：左侧多会话记忆，中间统一 Agent 过程（无意图路由，自主规划工具调用），右侧 **Inspector** 实时展示工具调用 Trace —— `Step 1 · settingSearch`（RAG 检索，带命中片段）→ `Step 2 · doTerminate`（终止协议）。Agent 的每一步决策都可见、可追溯。
 
 ---
 
@@ -37,12 +37,12 @@
 | **伏笔失控**         | 埋了 30 个伏笔，忘了回收，读者在评论区点名                              |
 | **通用大模型不可用** | 直接把整本丢进 ChatGPT 会超上下文；而"让模型凭记忆回答"必然产生幻觉     |
 
-**LoreKeeper 的解法**不是做一个聊天机器人，而是构建一条**"事实入库 → 语义索引 → Agent 检索推理 → 冲突检测 → 人工裁决"**的工程闭环：
+**LoreKeeper 的解法**不是做一个聊天机器人，而是构建一条**"事实入库 → 语义索引 → Agent 检索推理 → 冲突检测 → 覆盖修订"**的工程闭环：
 
 - 事实以**结构化四元组**（`entity / attribute / value / evidence`）落库，每条断言都带原文证据与出处章节；
 - 事实同时写入 **pgvector** 做语义索引，支持召回；
-- 用户提问先过**意图路由**分派到 5 条工作流，交由 **ReAct Agent** 自主规划工具调用；
-- 抽取与比对环节的冲突不自动覆写，而是进入**待确认队列**交给人裁决（Human-in-the-loop）。
+- 用户提问直接交由**统一 Agent**（ReAct 自主规划）选择工具调用；
+- 值冲突时**直接覆盖旧值并 `version+1` 保留版本历史**，改稿靠「覆盖章节」重传；一致性检查由 Agent 的 `consistencyCheck` 工具 dry-run 完成，不落库。
 
 ---
 
@@ -55,23 +55,21 @@ flowchart TB
     subgraph FE["前端 · Vue 3 + Vite（:5173）"]
         C["对话台 Chat"]
         K["知识库 Knowledge"]
-        R["审查 Review"]
         T["测试台 TestLab"]
         D["数据管理 DataManage"]
     end
 
     subgraph BE["主应用 · Spring Boot 3.5（:8080 /api）"]
         JWT["TenantFilter<br/>JWT → TenantContext"]
-        IR["IntentRouter<br/>5 意图 + 子类型"]
-        AF["LoreAgentFactory<br/>按意图装配工具 + SOP"]
+        AF["LoreAgentFactory<br/>统一装配工具 + SOP"]
         AG["ToolCallAgent<br/>ReAct 循环 · 防死循环"]
         subgraph TOOLS["工具集"]
             SST["settingSearch<br/>（RAG-as-Tool）"]
             QDB["query_database<br/>（MCP）"]
-            PD["parse_document<br/>（MCP）"]
+            CC["consistencyCheck<br/>（审查-as-Tool）"]
             TM["doTerminate"]
         end
-        subgraph SVC["确定性服务（不经 LLM）"]
+        subgraph SVC["确定性服务（固定步骤编排）"]
             ING["ChapterIngestService<br/>入库流水线"]
             MERGE["SettingMergeService<br/>归并状态机"]
             REV["ConsistencyReviewService<br/>一致性审查"]
@@ -82,22 +80,20 @@ flowchart TB
 
     subgraph MCP["MCP Server（独立进程）"]
         DB["lore-database-mcp-server<br/>:8125 · query_database"]
-        DP["lore-doc-parser-mcp-server<br/>:8124 · parse_document / split_chapters / …"]
     end
 
     subgraph STORE["存储 · PostgreSQL"]
-        REL["业务表<br/>work / chapter / world_setting<br/>foreshadow / timeline_event / pending_conflict"]
+        REL["业务表<br/>work / chapter / world_setting<br/>character / foreshadow / timeline_event"]
         VEC["vector_store<br/>pgvector · 1536 维 · HNSW"]
     end
 
     EXT[("DashScope<br/>qwen-max / text-embedding-v3 / gte-rerank-v2")]
 
     FE -->|"REST + SSE（Bearer JWT）"| JWT
-    JWT --> IR --> AF --> AG
+    JWT --> AF --> AG
     AG --> TOOLS
     TOOLS --> HS
     QDB -.->|"BearerSseClientTransport"| DB
-    PD -.->|"BearerSseClientTransport"| DP
     DB --> REL
     HS --> VEC
     HS --> REL
@@ -114,7 +110,6 @@ flowchart TB
 sequenceDiagram
     participant U as 用户（Vue）
     participant A as AiController
-    participant I as IntentRouter
     participant F as LoreAgentFactory
     participant G as ToolCallAgent
     participant S as settingSearch / MCP
@@ -122,11 +117,8 @@ sequenceDiagram
 
     U->>A: GET /ai/lore/chat?message=…（SSE）
     A->>A: TenantFilter 解析 JWT → Tenant(userId, workId)
-    A->>I: route(message)
-    I-->>A: {intent: QUERY, subType: SETTING}
-    A-->>U: event:intent
-    A->>F: create(QUERY, SETTING, tenant, conversationId)
-    F-->>A: Agent（settingSearch + query_database + doTerminate）
+    A->>F: create(tenant, conversationId)
+    F-->>A: Agent（settingSearch + query_database + consistencyCheck + doTerminate）
     loop ReAct（maxSteps = 20）
         G->>G: think() —— LLM 决策下一步工具
         G->>S: act() 执行工具
@@ -149,7 +141,6 @@ flowchart LR
     T --> C["Controller<br/>workId 一律取登录态<br/>不信任请求参数"]
     C --> B["BoundedMcpToolCallback<br/>调用前 putAll 覆盖模型参数<br/>强制注入 workId"]
     B -->|"Authorization: Bearer"| M1["database MCP :8125"]
-    B -->|"Authorization: Bearer"| M2["doc-parser MCP :8124"]
     M1 --> W["服务端二次兜底<br/>表/字段白名单 + WHERE work_id = ?"]
 ```
 
@@ -159,20 +150,16 @@ flowchart LR
 
 ## 3. 功能模块
 
-### 3.1 五意图 Agent 路由
+### 3.1 统一 Agent（无意图路由）
 
-用户一句话进来，先由 `IntentRouter` 做一次 LLM 结构化分类（`RouteResult` record），再按意图装配**不同的工具集 + 不同的 SOP prompt + 不同的检索过滤**：
+用户一句话直接交由**统一 Agent**：一个 Agent 一套工具 + 一套 SOP，由 LLM 自主规划工具调用（省一次意图路由 LLM、避免路由误判）。
 
-| 意图         | 中文名     | 装配工具                                     | 检索裁剪策略                                    |
-| ------------ | ---------- | -------------------------------------------- | ----------------------------------------------- |
-| `WRITE`      | 设定提示   | settingSearch + doTerminate                  | 硬过滤 `type ∈ {setting, foreshadow}`           |
-| `REVIEW`     | 一致性审查 | settingSearch + parseDocument + doTerminate  | 硬过滤 `type = setting`                         |
-| `QUERY`      | 世界观问答 | settingSearch + query_database + doTerminate | `SETTING` 子类型启用优先召回 setting/foreshadow |
-| `FORESHADOW` | 伏笔追踪   | settingSearch + query_database + doTerminate | 全量                                            |
-| `CHAT`       | 闲聊       | 同 QUERY                                     | 全量                                            |
-
-- `QUERY` 下再细分 `SETTING`（问设定/世界观事实）与 `CHAPTER`（问已写章节剧情）子类型，决定检索偏好。
-- 路由解析失败 → 安全侧降级为 `CHAT`，不启用优先检索。
+| 工具               | 类型          | 用途                                                                   |
+| ------------------ | ------------- | ---------------------------------------------------------------------- |
+| `settingSearch`    | RAG-as-Tool   | 语义检索设定库（角色/地点/规则/伏笔/已写章节），优先召回 setting/foreshadow，不足补章节 |
+| `query_database`   | MCP           | 结构化等值查询（未回收伏笔 status=open、时间线、按实体名精确查设定），懒连接失败降级 |
+| `consistencyCheck` | 审查-as-Tool  | 粘贴新章节正文做 dry-run 一致性检测（只读，不落库）                     |
+| `doTerminate`      | 终止协议      | 完成任务后结束 Agent                                                   |
 
 ### 3.2 混合检索 RAG（Hybrid Search）
 
@@ -195,54 +182,54 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    F["上传 TXT/MD/PDF/DOCX"] --> P["FileParseService<br/>MCP 优先，失败降级本地 PDFBox/POI"]
-    P --> S["split_chapters<br/>（MCP，失败降级整本一章）"]
-    S --> CH["存 chapter（整章原文）"]
+    F["上传 TXT/MD/PDF/DOCX"] --> P["FileParseService<br/>本地 PDFBox/POI 解析"]
+    P --> CH["存 chapter（整本一章原文）"]
     CH --> VC["段落子块向量化<br/>失败 → 补偿删除 chapter"]
     VC --> EX["EntityExtractor<br/>LLM 抽取 设定/更新/伏笔/时间线"]
     EX --> FE["过滤无 evidence 的条目（反幻觉）"]
-    FE --> MG["SettingMergeService<br/>DUPLICATE / NEW / UPDATE / CONFLICT"]
+    FE --> CHR["upsert character 角色档案<br/>（别名归一的数据依据）"]
+    CHR --> MG["SettingMergeService<br/>DUPLICATE / NEW / UPDATE / CONFLICT"]
     MG -->|NEW/UPDATE| DB[("落 world_setting<br/>同步重建向量索引")]
-    MG -->|CONFLICT| PC[("落 pending_conflict<br/>等人工裁决")]
+    MG -->|CONFLICT| OV["直接覆盖旧值<br/>version+1 · 重建索引"]
     DB --> FS["伏笔 / 时间线落库（失败 log.warn 不阻塞）"]
 ```
 
-### 3.4 一致性审查与冲突裁决
+### 3.4 一致性审查：dry-run 工具 + 反向冲突扫描 + 覆盖章节
 
-- **归并状态机**：`DUPLICATE`（同实体同属性同值）→ 忽略；`NEW` → 落库；`UPDATE`（值变化）→ 落库 + version+1 + 重建向量；`CONFLICT` → **不覆写**，进待确认队列。
-- **别名归一**：实体命中 `character.name/aliases` 时用标准名落库与比对，避免"林玄"与"主角"被拆成两个实体。
-- **反向冲突扫描**：改设定后拿新设定当 query 检索章节 → LLM 判矛盾 → 代码层只保留 `isConflict=true`，并二次过滤 `type=chapter`。
-- **人机协同**：`pending_conflict` 队列支持 accept / reject，`updateStatus` 带 `AND status='pending'` 幂等条件，防重复采纳。
+一致性检查拆成两条**只读**路径，都不再落地「待确认队列」：
 
-### 3.5 前端 5 页控制台
+- **归并状态机**（`SettingMergeService`）：`DUPLICATE`（同实体同属性同值）→ 忽略；`NEW` → 落库；`UPDATE`（实体已有、属性新）→ 追加 + `version+1`；`CONFLICT`（同实体同属性、值异）→ **直接覆盖旧值** + `version+1` + 重建向量索引（版本号保留历史演进）。
+- **`consistencyCheck` 工具（dry-run）**：Agent 把新章正文交给 `ConsistencyReviewService.reviewChapterDryRun`，走 `judge()` 纯判定（只读、不落库、不写向量），返回矛盾清单 + 未回收伏笔提醒。
+- **反向冲突扫描**（`ConflictScanService`）：在数据管理页改设定后，拿新设定当 query 检索章节 → LLM 判矛盾 → 代码层只保留 `isConflict=true` 且二次过滤 `type=chapter`，弹出「待修正清单」。
+- **改稿入口 = 覆盖章节**：知识库页对章节执行「覆盖」（`replaceChapter`）级联替换原文/向量/设定/伏笔，原 `seq` 不变，取代旧的「待确认队列」人机协同。
+- **别名归一**：实体命中 `character.name/aliases` 时用标准名落库与比对，避免「林玄」与「主角」被拆成两个实体；角色档案由章节抽取 `upsert` + 数据管理页人工回填共同维护。
+
+### 3.5 前端 4 页控制台
 
 | 页面                       | 路由      | 核心能力                                                                                     |
 | -------------------------- | --------- | -------------------------------------------------------------------------------------------- |
-| **对话台** `Chat.vue`      | `/`       | 三栏（会话列表 / 消息流 / Inspector）；SSE 命名事件驱动；意图徽章 + 逐步工具 Trace；可"停止" |
-| **知识库** `Knowledge.vue` | `/rag`    | RAG 分块可视化（type chip / `ch#N` / entityId / 原文）；多文件批量上传 + 进度；级联删除确认  |
-| **审查** `Review.vue`      | `/review` | 上传/粘贴章节 → 矛盾清单（实体/本章断言/历史断言/出处）+ 未回收伏笔 + 待确认队列采纳驳回     |
-| **测试台** `TestLab.vue`   | `/test`   | MCP 工具真调（5 个工具 + 连通性 chip）、RAG 检索测试、意图路由测试                           |
-| **数据** `DataManage.vue`  | `/data`   | 作品（新建/切换/编辑/删除）、设定、伏笔三 Tab CRUD                                           |
+| **对话台** `Chat.vue`      | `/`       | 三栏（会话列表 / 消息流 / Inspector）；SSE 命名事件驱动；逐步工具 Trace；可"停止" |
+| **知识库** `Knowledge.vue` | `/rag`    | RAG 分块可视化（type chip / `ch#N` / entityId / 原文）；多文件批量上传；级联删除 + 覆盖章节  |
+| **测试台** `TestLab.vue`   | `/test`   | MCP 工具真调（`query_database` + 连通性 chip）、RAG 检索测试                                        |
+| **数据** `DataManage.vue`  | `/data`   | 作品 / 设定 / 伏笔 / 角色四 Tab；设定保存触发冲突扫描弹「待修正清单」；角色候选人工回填            |
 
-**知识库 —— RAG 分块可视化**：左侧章节/设定库/伏笔库三 Tab，右侧每个 chunk 展示 `type` chip、`ch#N`、字数、`parentId` 与原文，可直观检查分块策略与索引质量：
+**知识库 —— RAG 分块可视化 + 覆盖章节**：左侧章节/设定库/伏笔库三 Tab，右侧每个 chunk 展示 `type` chip、`ch#N`、字数、`entityId`/`parentId` 与原文，可直观检查分块策略与索引质量；章节支持「覆盖」重传替换与级联删除：
 
 ![知识库：RAG 分块可视化，展示 chunk 元数据与原文](docs/screenshots/02-knowledge.png)
 
-**测试台 —— MCP 工具真调**：顶部实时连通性状态（`doc-parser ●` / `database ●`），5 个 MCP 工具（`parse_document` / `query_database` / `split_chapters` / `parse_document_content` / `detect_encoding`）逐一真调，另有 RAG 检索测试与意图路由调试：
+**测试台 —— MCP 工具真调**：顶部实时连通性状态（`database ●`），`query_database` 工具真调，另有 RAG 检索测试：
 
-![测试台：MCP 工具连通性与真调、RAG 检索测试、意图路由调试](docs/screenshots/04-testlab.png)
+![测试台：MCP 工具连通性与真调、RAG 检索测试](docs/screenshots/04-testlab.png)
 
-**设定库 —— 结构化四元组落库**：章节上传后由 `EntityExtractor` 抽取的 `实体 / 属性 / 值 / 版本`（含版本号，值变化自动 +1），保存时触发反向冲突扫描：
+**数据管理 —— 设定四元组落库 + 冲突扫描**：设定 Tab 展示 `实体 / 属性 / 值 / 版本`（值变化自动 +1），保存时触发反向冲突扫描，弹出「待修正清单」：
 
-![设定库：章节上传自动抽取的设定四元组（实体/属性/值/版本）](docs/screenshots/05b-settings.png)
-
-**一致性审查**：上传 TXT/MD/PDF/Word 或粘贴正文，输出矛盾清单与未回收伏笔；`CONFLICT` 进入下方**待确认队列**，人工采纳/驳回（人机协同）：
-
-![一致性审查：上传章节触发审查，冲突进入待确认队列](docs/screenshots/03-review.png)
+![数据管理：设定四元组（实体/属性/值/版本）+ 冲突扫描](docs/screenshots/05b-settings.png)
 
 **数据管理 —— 多作品切换**：切换作品即后端重签 JWT（`workId` 随 token 走，前端不传参），全站数据随 `workStore.version` 广播刷新：
 
 ![数据管理：多作品列表与切换](docs/screenshots/05-data.png)
+
+> **角色 Tab（人工确认回填）**：历史章节抽取的角色不会自动同步到 `character` 表，需在数据页「角色」Tab 勾选确认哪些实体是人物（可填别名）再导入；导入后「别名归一」「角色检索」「角色词表」才对旧数据生效，误判可「忽略/恢复」。这是新版本里保留的一处显式 Human-in-the-loop 环节。
 
 ### 3.6 对话记忆与多会话
 
@@ -262,13 +249,13 @@ flowchart TB
 | 模型接入      | Spring AI Alibaba + DashScope SDK | M6.1 / 2.22.9 | 通义千问 `qwen-max` + `text-embedding-v3`(1536 维) + `gte-rerank-v2`                                                |
 | 向量库        | **PostgreSQL + pgvector**         | M6            | **关键决策**：向量与业务数据同库 → 删除操作可在**单个 `@Transactional`** 内原子完成，避免"删了表、没删向量"的脏数据 |
 | 检索          | 自研 HybridSearch                 | —             | Spring AI M6 无开箱混合检索，自研向量 + 关键词双路 RRF 融合 + Rerank                                                |
-| 工具协议      | **MCP**（Model Context Protocol） | —             | 让"数据库查询""文档解析"成为可被 Agent 动态发现的独立服务，解耦部署                                                 |
+| 工具协议      | **MCP**（Model Context Protocol） | —             | 让"数据库查询"成为可被 Agent 动态发现的独立服务，解耦部署                                                     |
 | MCP 客户端    | `spring-ai-mcp-client`            | M6            | **官方 SSE transport 不支持自定义 header**，故自研 `BearerSseClientTransport`                                       |
 | 文档解析      | PDFBox + POI                      | 3.0.4 / 5.4.1 | 主项目本地解析，见 5.6 的边界划分                                                                                   |
 | 流式协议      | **SSE（SseEmitter）**             | —             | Agent 执行链路长，需要逐步回传过程；比 WebSocket 轻量、天然穿透代理                                                 |
 | 记忆          | 自研 `FileBasedChatMemory` + Kryo | 5.6.2         | 轻量可落地；生产可平替为 Redis / PG                                                                                 |
 | 鉴权          | 自研 JWT（hutool-jwt）            | —             | 无状态，payload 携带 `userId + workId`，天然承载租户上下文                                                          |
-| 前端          | Vue 3 + Vite                      | 3.5 / 6       | `<script setup>` + 懒加载路由；**不引入 UI 框架**，551 行手写设计系统                                               |
+| 前端          | Vue 3 + Vite                      | 3.5 / 6       | `<script setup>` + 懒加载路由；**不引入 UI 框架**，自研手写设计系统（`styles.css` 约 500 行）                                               |
 | SSE 客户端    | `@microsoft/fetch-event-source`   | 2.0.1         | 原生 `EventSource` 不支持自定义 header（JWT 必须走 header）                                                         |
 | 部署          | Docker / Nginx                    | —             | 前端 `node:20-alpine` 构建 → `nginx:alpine`；后端 `maven:3.9-corretto-21`                                           |
 
@@ -282,7 +269,7 @@ BaseAgent       状态机 / run() / runstream(SseEmitter) / 历史注入 / 记�
        └─ ToolCallAgent  工具执行、终止协议
 ```
 
-**问题**：新作品没有任何设定数据时，`WRITE` 工作流检索为空，LLM 把"没搜到"误判为"任务未完成"，反复调用 `settingSearch` 直到 `maxSteps=20` 耗尽，请求挂起 3 分钟才返回。
+**问题**：新作品没有任何设定数据时，检索为空，LLM 把"没搜到"误判为"任务未完成"，反复调用 `settingSearch` 直到 `maxSteps=20` 耗尽，请求挂起 3 分钟才返回。
 
 **解法**（代码层兜底，不依赖模型自觉）：
 
@@ -306,7 +293,7 @@ MCP 工具执行在异步线程，导致 `ThreadLocal`（`TenantContext`）跨�
 
 ### 5.4 懒加载 MCP + 优雅降级
 
-早期把 MCP 交给 Spring AI autoconfigure 在启动时同步初始化，一旦 8124 未监听就会 `ConnectException` → **整个主应用启动失败**。
+早期把 MCP 交给 Spring AI autoconfigure 在启动时同步初始化，一旦 MCP Server 未监听就会 `ConnectException` → **整个主应用启动失败**。
 
 **解法**：移除 `spring.ai.mcp.client.sse.connections` 配置，改由 `McpClientPool` 按 `(workId, toolName)` **懒创建并缓存**，连接失败返回 `null` 降级（本次 Agent 不挂该工具），`@PreDestroy` 统一关闭。现在启动主项目不再要求先启 MCP。
 
@@ -316,7 +303,7 @@ MCP 工具执行在异步线程，导致 `ThreadLocal`（`TenantContext`）跨�
 | --- | ------------------------ | --------------------------------------------------- | ---------------------------------------------------------------------- |
 | 1   | LLM 拿不到出处，无法标注 | `SettingSearchTool` 只返回 `getText()`，丢 metadata | 结果带 `[类型\|第N章]` 标注                                            |
 | 2   | 三类内容混召回           | 向量 filter 只 `eq(workId)`，未按 type              | 加 `in(type, …)` 下推 pgvector；关键词路 SQL 同步过滤                  |
-| 3   | 实体名提权失效           | 词表取自 `character` 种子表，而上传链路从不写该表   | 主词表改 `SELECT DISTINCT entity FROM world_setting`（随上传自动维护） |
+| 3   | 实体名提权失效           | 词表取自 `character` 种子表，而上传链路从不写该表   | 主词表改 `SELECT DISTINCT entity FROM world_setting`（随上传自动维护）；后随角色档案上线，上传链路 `upsert` 角色，词表升级为 `world_setting.entity ∪ character.name/aliases` |
 | 4   | 设定短文本召回弱         | 纯向量对短文本不友好                                | 由 #3 + #5 顺带解决                                                    |
 | 5   | Rerank 从未生效          | `@ConditionalOnProperty` 关闭 + 成功路径无日志      | 打开开关 + 补成功日志（可观测）                                        |
 
@@ -329,7 +316,7 @@ MCP 工具执行在异步线程，导致 `ThreadLocal`（`TenantContext`）跨�
 | 世界观问答 / 设定提示 | **Agent**（LLM 规划 + 工具调用）               | 意图多样、步骤不固定，适合自主规划                                                                   |
 | 章节上传入库          | **确定性流水线**（`ChapterIngestService`）     | 步骤固定，交给 Agent 只会引入不确定性                                                                |
 | 一致性审查            | **确定性流水线**（`ConsistencyReviewService`） | 同上；审查结论必须可复现                                                                             |
-| PDF/Word 解析         | **本地 `FileParseService`**                    | 前端上传的是二进制流（无服务器路径），而 `parse_document` MCP 只收本地路径；独立进程间文件系统不共享 |
+| PDF/Word 解析         | **本地 `FileParseService`**                    | 前端上传的是二进制流，本地 PDFBox / POI 直接解析，无跨进程文件系统问题 |
 | 数据库查询            | **MCP 工具**                                   | 只读结构化查询，跨进程复用，天然适合 MCP                                                             |
 
 > 反例教训：曾把"上传 PDF 做一致性检查"混为一谈要走 Agent，澄清后收敛为"上传入库 = 确定性动作，审查 = 确定性流水线"。
@@ -340,7 +327,7 @@ MCP 工具执行在异步线程，导致 `ThreadLocal`（`TenantContext`）跨�
 flowchart LR
     A["DELETE /lore/chapter/{id}"] --> B["① 收集该章派生的<br/>setting / foreshadow / timeline id"]
     B --> C["② 删向量<br/>vector_store WHERE type+entityId/parentId/workId"]
-    C --> D["③ 删事实源<br/>6 张业务表"]
+    C --> D["③ 删事实源<br/>5 张业务表"]
     D --> E["④ 边界处理<br/>在该章被回收的伏笔回退 open"]
 ```
 
@@ -375,7 +362,7 @@ flowchart LR
 | `RagEvaluator`             | **Recall@K** / **MRR** / ContextPrecision@K                             | **`Recall@5 = 1.0`、`MRR = 1.0`**；ContextPrecision 纯函数单测通过                          |
 | `LlmJudgeService`（Judge） | Faithfulness / AnswerRelevancy / AnswerAccuracy / unsupportedClaims      | 端到端 10 样本（7 正 + 3 负）**ContextRecall / Faithfulness / Relevancy / Accuracy 全 1.00**   |
 | `ScoreAggregator`          | 加权总分 `0.35R+0.25F+0.25A+0.15Rel` + 失败定位（检索/生成掉分）         | **加权总分 = 1.0000**，失败回放无失败样本（10/10 满分）                                        |
-| `AgentEvaluator`           | Tool Call F1 + Intent Accuracy + Goal Accuracy                           | **Intent Accuracy=1.0（6/6）、Tool Call F1=1.0、Goal Accuracy=1.0（5/5）**                     |
+| `AgentEvaluator`           | Tool Call F1 + Goal Accuracy                                            | **Tool Call F1=1.0、Goal Accuracy=1.0（5/5）**                                                |
 | `ExtractionEvaluator`      | 实体 P/R/F1 + 伏笔 Accuracy / MAE                                        | 真连 LLM，默认 `@Disabled` 隔离                                                              |
 
 **关键设计**：
@@ -384,9 +371,9 @@ flowchart LR
 - RAG 命中判定用 `metadata.entityId`，不用 pgvector 生成的 `Document.id`（UUID）；
 - 负样本刻意用"同值不同实体"而非"无关实体"（后者走 `NEW` 分支，失去区分度）；
 - **评测器（Evaluator/Judge）放 `src/main`、进 CI；运行器（真连 DB/LLM）放 `src/test`、`@Disabled`**，遵守"确定性环节不进 LLM"；
-- 端到端 QA 的 3 条**无答案负样本**暴露并修复了「无答案场景 LLM 空回答导致前端空白」的 bug（`QUERY_SOP` 强化 + `ToolCallAgent.act` 兜底）——评测体系能反哺产品缺陷。
+- 端到端 QA 的 3 条**无答案负样本**暴露并修复了「无答案场景 LLM 空回答导致前端空白」的 bug（`AGENT_SOP` 强化 + `ToolCallAgent.act` 兜底）——评测体系能反哺产品缺陷。
 
-> 运行：纯函数单测 `mvnw.cmd -Dtest=RagEvaluatorTest,ConsistencyEvaluatorTest,AgentEvaluatorTest,ScoreAggregatorTest test`（无需 DB）；真连运行器（`QaEvalRunnerTest` / `IntentEvalRunnerTest` / `AgentEvalRunnerTest`）需先删 `@Disabled`。
+> 运行：纯函数单测 `mvnw.cmd -Dtest=RagEvaluatorTest,ConsistencyEvaluatorTest,AgentEvaluatorTest,ScoreAggregatorTest test`（无需 DB）；真连运行器（`QaEvalRunnerTest` / `AgentEvalRunnerTest`）需先删 `@Disabled`。
 
 ---
 
@@ -426,7 +413,7 @@ CREATE INDEX IF NOT EXISTS vector_store_hnsw
 # 主应用
 cp src/main/resources/application-local.yml.example src/main/resources/application-local.yml
 
-# database MCP（doc-parser 无敏感配置，直接提交，无需生成）
+# database MCP
 cp lore-database-mcp-server/src/main/resources/application.yaml.example \
    lore-database-mcp-server/src/main/resources/application.yaml
 ```
@@ -459,14 +446,11 @@ spring:
 # 终端 2：database MCP（:8125）
 cd lore-database-mcp-server && ../mvnw.cmd spring-boot:run
 
-# 终端 3：doc-parser MCP（:8124）
-cd lore-doc-parser-mcp-server && ../mvnw.cmd spring-boot:run
-
-# 终端 4：前端（:5173）
+# 终端 3：前端（:5173）
 cd xiaoyu-ai-agent-frontend && npm install && npm run dev
 ```
 
-> MCP 可不启动：主应用对 MCP 走懒连接 + 降级，仅 `parse_document` / `query_database` 相关能力不可用。
+> MCP 可不启动：主应用对 MCP 走懒连接 + 降级，仅 `query_database` 相关能力不可用。
 > MCP Server 与主应用必须共享同一个 `LOREKEEPER_JWT_SECRET`，否则 401。
 
 打开 `http://localhost:5173`，路由守卫会用演示账号自动登录。
@@ -489,25 +473,28 @@ cd xiaoyu-ai-agent-frontend && docker build -t lorekeeper-front . && docker run 
 ai-aigent/
 ├── src/main/java/com/xiaoyu/aiaigent/
 │   ├── agent/          # Agent 内核：BaseAgent / ReActAgent / ToolCallAgent
-│   │                   #            LoreAgentFactory（装配+SOP）/ IntentRouter
-│   ├── rag/            # HybridSearchService / RrfMerger / RerankService
-│   │                   # PgVectorVectorStoreConfig / ChunkingService / QueryRewriter
+│   │   │               #            LoreAgentFactory（统一装配 + SOP）
+│   │   └── model/      # AgentState
+│   ├── rag/            # HybridSearchService / RrfMerger / RerankService / ChunkingService
+│   │                   # PgVectorVectorStoreConfig / QueryRewriter / MyKeywordEnricher
+│   │                   # 实验性 RAG Advisor：LoreRagCloudAdvisorConfig / LoreRagCustomAdvisorFactory / ...
+│   ├── advisor/        # MyLoggerAdvisor（已接入）/ ReReadingAdvisor（Re2，未接入）
 │   ├── mcp/            # McpClientPool / BearerSseClientTransport / BoundedMcpToolCallback
 │   ├── lore/           # 业务服务：ChapterIngestService / SettingMergeService
 │   │                   # ConsistencyReviewService / ConflictScanService / EntityExtractor
-│   │                   # FileParseService / WorkService / ...
+│   │                   # CharacterService / FileParseService / WorkService / ...
 │   ├── controller/     # 11 个 REST Controller
 │   ├── repository/     # 8 个 JdbcTemplate Repository（record 实体）
 │   ├── security/       # JwtService / SecurityConfig
 │   ├── common/         # TenantContext / TenantFilter
 │   ├── chatmemory/     # FileBasedChatMemory（Kryo）
-│   ├── tools/          # SettingSearchTool / TerminateTool / WebSearch / PDFGeneration
+│   ├── tools/          # SettingSearchTool / ConsistencyCheckTool / TerminateTool / ToolRegistration
 │   ├── eval/           # 评测器：Consistency/Rag/Score/Agent Evaluator（纯函数）+ LlmJudgeService
+│   ├── constant/       # FileConstant
+│   ├── demo/rag/       # MultiQueryExpanderDemo（Spring AI 多查询扩展演示）
 │   └── config/         # CORS / 全局异常处理
 ├── lore-database-mcp-server/     # MCP · :8125 · query_database（只读、白名单）
-├── lore-doc-parser-mcp-server/  # MCP · :8124 · parse_document / split_chapters /
-│                                #             parse_document_content / detect_encoding
-├── xiaoyu-ai-agent-frontend/    # Vue 3 前端（src 25 文件 / ~3.7k 行）
+├── xiaoyu-ai-agent-frontend/    # Vue 3 前端（src 20 文件 / ~3.5k 行）
 ├── docs/screenshots/            # README 界面截图
 └── Dockerfile / nginx.conf
 ```
@@ -521,17 +508,17 @@ ai-aigent/
 | 分组   | 方法                      | 路径                                                 | 说明                                                                     |
 | ------ | ------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------ |
 | 鉴权   | POST                      | `/auth/register` `/auth/login`                       | 注册 / 登录，签发 JWT                                                    |
-| **AI** | GET                       | `/ai/lore/chat`                                      | **统一入口**：意图路由 → Agent → SSE（`intent`/`tool`/`answer`/`error`） |
-|        | POST                      | `/ai/lore/review` `/ai/lore/review/file`             | 一致性审查（文本 / 上传文件）                                            |
-| 章节   | POST                      | `/lore/chapter/upload` `/lore/chapter/upload-file`   | 单章入库 / 文件上传（TXT·MD·PDF·DOCX）                                   |
+| **AI** | GET                       | `/ai/lore/chat`                                      | **统一入口**：统一 Agent → SSE（`tool`/`answer`/`error`） |
+| 章节   | POST                      | `/lore/chapter/upload` `/lore/chapter/upload-file`   | 单章入库 / 文件上传（TXT·MD·PDF·DOCX，可批量）                           |
 |        | GET / DELETE              | `/lore/chapter/list` `/lore/chapter/{id}`            | 列表 / 三级级联删除                                                      |
-| 设定   | GET / POST / DELETE       | `/setting/list` `/setting/save` `/setting/{id}`      | 设定 CRUD + 冲突扫描                                                     |
+|        | POST                      | `/lore/chapter/{id}/replace`                         | 覆盖式替换章节（级联替换设定/伏笔，原 seq 不变）                          |
+| 设定   | GET / POST / DELETE       | `/setting/list` `/setting/save` `/setting/{id}`      | 设定 CRUD + 反向冲突扫描（返回待修正清单）                                |
 | 伏笔   | GET / POST / DELETE       | `/foreshadow/...`                                    | 伏笔列表 / 新建 / 回收 / 删除                                            |
-| 待确认 | GET / POST                | `/pending/list` `/pending/{id}/accept\|reject`       | 人机协同裁决（幂等）                                                     |
+| 角色   | GET / POST                | `/character/list` `/character/candidates` `/character/ignored` `/character/backfill` `/character/ignore` `/character/restore` | 角色档案 + 候选人工确认回填（导入 / 忽略 / 恢复）          |
 | 作品   | GET / POST / PUT / DELETE | `/work/...`                                          | 作品 CRUD + `switch`（重签 JWT）                                         |
 | 会话   | GET / DELETE              | `/chat/conversations` `/chat/conversations/{chatId}` | 多会话历史                                                               |
 | 可观测 | GET / POST                | `/rag/chunks` `/rag/search`                          | RAG 分块可视化 / 检索测试                                                |
-|        | GET / POST                | `/debug/intent` `/debug/mcp/*`                       | 意图路由调试 / MCP 工具真调                                              |
+|        | GET / POST                | `/debug/mcp/status` `/debug/mcp/query`               | MCP 连通性探测 / 工具真调                                                 |
 
 > 接口文档：启动后访问 `/doc.html`（Knife4j）。
 
@@ -543,15 +530,15 @@ ai-aigent/
 | -------------------- | -------------------- | ------------------------------------------------------------------------------------------------ |
 | `users`              | 用户                 | email(unique) / password_hash                                                                    |
 | `work`               | 作品（租户隔离单元） | user_id / title / genre / author / intro                                                         |
-| `chapter`            | 章节                 | work_id / seq / title / **content（整章原文）**                                                  |
+| `chapter`            | 章节                 | work_id / seq / title / status / **content（整章原文）**                                         |
 | `world_setting`      | **设定四元组**       | work_id / type / **entity / attribute / value / evidence** / established_chapter / version       |
-| `character`          | 角色（别名种子）     | name / **aliases JSONB** / role / ability                                                        |
+| `character`          | **角色档案（别名归一）** | name / **aliases JSONB** / role / ability（章节抽取自动 upsert + 数据页人工回填）              |
+| `character_ignored`  | 角色候选忽略表       | work_id / entity（从候选列表隐藏，不删设定）                                                     |
 | `foreshadow`         | 伏笔                 | content / planted_chapter / resolved_chapter / status(open/closed)                               |
 | `timeline_event`     | 时间线               | time_point / event / involved_characters JSONB                                                   |
-| `pending_conflict`   | **待确认队列**       | entity / attribute / old_value / new_value / evidence / status                                   |
-| `consistency_report` | 审查报告             | chapter_id / report_json JSONB                                                                   |
+| `consistency_report` | 审查报告（遗留）     | chapter_id / report_json JSONB（dry-run 审查已不落库，仅级联删除时清理）                         |
 | `vector_store`       | 语义索引             | content / **metadata JSONB（workId/type/entityId/parentId/chapterNo）** / embedding vector(1536) |
-| `eval_trace`         | 评测 trace（线上回灌） | work_id / user_message / intent / tool_sequence / answer / loop_guard / step_count / cost_ms |
+| `eval_trace`         | 评测 trace（线上回灌） | work_id / user_message / tool_sequence / answer / loop_guard / step_count / cost_ms |
 
 设计要点：**业务表存"可精确查询的事实"，`vector_store` 存"可语义召回的片段"**，两者必须同步维护 —— 任何落库/更新/删除都要连带维护向量索引。
 
@@ -566,14 +553,15 @@ ai-aigent/
 - **记忆不回放工具 trace**：为控制记忆体积只存"问答对"，代价是历史回放无过程信息；
 - **MCP 降级非无代价**：连接失败返回 `null` 不入缓存，每次请求都会重试 —— 因此下线 MCP 要从配置移除而非仅降级；
 - **前端无移动端适配**：桌面端工具型产品定位，未做响应式断点；
-- **MVP 无独立登录页**：演示账号自动登录，正式环境需补登录/注册页与密码策略。
+- **MVP 无独立登录页**：演示账号自动登录，正式环境需补登录/注册页与密码策略；
+- **待确认队列已下线**：`CONFLICT` 直接覆盖旧值（`version+1` 保留历史），改稿靠「覆盖章节」，代价是失去「冲突人机裁决」的显式入口（现仅存角色候选回填一处人机协同）。
 
 ### 后续规划
 
 - [ ] **GraphRAG**：角色关系图谱（多跳查询 + 前端可视化，AntV G6 / ECharts graph），解决"角色 A 的师父的宿敌是谁"这类多跳问题；
 - [ ] 检索链路加"QUERY 类型偏好排序"（当前长章节原文仍可能挤占设定）；
 - [ ] 语义等价归并（「左撇子」vs「惯用左手」）引入 LLM 判定，权衡成本与不确定性；
-- [ ] `pending_conflict` / `vector_store` DDL 补齐到 `db/schema.sql`；
+- [ ] `eval_trace` 建表 DDL 并入 `db/schema.sql`（当前在 `docs/rag-agent-eval-plan.md` 手动执行）；
 - [ ] 密钥全面改为环境变量注入；
 - [ ] 前端组件化拆分（弹窗/表格当前在各页重复实现）。
 - [ ] 评测集扩充难样本（语义等价 / 多跳 / 跨章矛盾），提升端到端 QA 区分度；

@@ -2,6 +2,7 @@ package com.xiaoyu.aiaigent.lore;
 
 import com.xiaoyu.aiaigent.rag.ChunkingService;
 import com.xiaoyu.aiaigent.repository.ChapterRepository;
+import com.xiaoyu.aiaigent.repository.CharacterRepository;
 import com.xiaoyu.aiaigent.repository.ForeshadowRepository;
 import com.xiaoyu.aiaigent.repository.TimelineEventRepository;
 import org.slf4j.Logger;
@@ -28,6 +29,7 @@ public class ChapterIngestService {
     private final SettingMergeService mergeService;
     private final ForeshadowRepository foreshadowRepository;
     private final TimelineEventRepository timelineEventRepository;
+    private final CharacterRepository characterRepository;
 
     public ChapterIngestService(ChapterRepository chapterRepository,
                                 ChunkingService chunkingService,
@@ -35,7 +37,8 @@ public class ChapterIngestService {
                                 EntityExtractor entityExtractor,
                                 SettingMergeService mergeService,
                                 ForeshadowRepository foreshadowRepository,
-                                TimelineEventRepository timelineEventRepository) {
+                                TimelineEventRepository timelineEventRepository,
+                                CharacterRepository characterRepository) {
         this.chapterRepository = chapterRepository;
         this.chunkingService = chunkingService;
         this.vectorStore = vectorStore;
@@ -43,6 +46,7 @@ public class ChapterIngestService {
         this.mergeService = mergeService;
         this.foreshadowRepository = foreshadowRepository;
         this.timelineEventRepository = timelineEventRepository;
+        this.characterRepository = characterRepository;
     }
 
     public ChapterIngestResult ingestChapter(long workId, String title, String chapterText) {
@@ -84,6 +88,9 @@ public class ChapterIngestService {
             ChapterExtraction ex = entityExtractor.extract(chapterText);
             int newSettings = 0, updatedSettings = 0, conflicts = 0;
 
+            // 先维护角色档案（character 表）：让下游归并的「别名归一」与「type=person 判定」有数据可依
+            upsertCharacters(workId, ex.characters());
+
             // 新设定断言 + 对已有设定的更新断言，统一走归并（CONFLICT 也会直接覆盖旧值）
             for (NewSetting s : ex.settings()) {
                 switch (mergeService.merge(s, workId, seq)) {
@@ -116,11 +123,36 @@ public class ChapterIngestService {
         }
     }
 
+    /**
+     * 维护 character 表：把抽取到的角色（标准名 + 别名）upsert 进角色档案。
+     * 已存在（按 name 或别名命中）则跳过，不覆盖既有档案；写入失败仅告警，不阻塞主线。
+     */
+    private void upsertCharacters(long workId, List<CharacterRef> characters) {
+        if (characters == null) {
+            return;
+        }
+        for (CharacterRef c : characters) {
+            if (c == null || c.name() == null || c.name().isBlank()) {
+                continue;
+            }
+            String name = c.name().trim();
+            if (characterRepository.findByNameOrAlias(workId, name).isPresent()) {
+                continue;
+            }
+            try {
+                characterRepository.save(CharacterRepository.Character.of(
+                        workId, name, c.aliases(), null, null, null, null));
+            } catch (Exception e) {
+                log.warn("角色档案写入失败（不影响主线，workId={}, name={}）: {}", workId, name, e.getMessage());
+            }
+        }
+    }
+
     private void indexForeshadow(long workId, long fid, int seq, String content) {
         try {
             vectorStore.add(List.of(chunkingService.settingToDocument(workId, fid, seq, "foreshadow", content)));
         } catch (Exception e) {
-            log.warn("伏笔向量索引失败（事实源已在表里，可后续重建）: {}", e.getMessage());
+            log.warn("伏笔向量索引失败（事实源已在表里，可后续重建）fid={} content={}: {}", fid, content, e.getMessage());
         }
     }
 
