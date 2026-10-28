@@ -1,6 +1,7 @@
 package com.xiaoyu.aiaigent.lore;
 
 import com.xiaoyu.aiaigent.rag.ChunkingService;
+import com.xiaoyu.aiaigent.repository.CharacterRepository;
 import com.xiaoyu.aiaigent.repository.WorldSettingRepository;
 import com.xiaoyu.aiaigent.repository.WorldSettingRepository.WorldSetting;
 import org.junit.jupiter.api.Test;
@@ -29,9 +30,10 @@ class SettingServiceTest {
     private final VectorStore vectorStore = mock(VectorStore.class);
     private final JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
     private final ConflictScanService conflictScanService = mock(ConflictScanService.class);
+    private final CharacterRepository characterRepository = mock(CharacterRepository.class);
 
     private final SettingService service = new SettingService(
-            worldSettingRepository, chunkingService, vectorStore, jdbcTemplate, conflictScanService);
+            worldSettingRepository, chunkingService, vectorStore, jdbcTemplate, conflictScanService, characterRepository);
 
     @Test
     void save_new_createsReindexesAndReturnsConflicts() {
