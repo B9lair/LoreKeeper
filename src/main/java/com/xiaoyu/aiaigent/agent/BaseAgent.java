@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 
 /**
@@ -131,6 +132,11 @@ public abstract class BaseAgent {
         // 创建SseEmitter，设置较长的超时时间
         SseEmitter emitter = new SseEmitter(300000L);// 5分钟超时
 
+        // 客户端断连标记：safeSend 返回 false 或 onError 回调触发时置 true。
+        // 断连后不能再调用 emitter.complete()/send()，否则 AsyncContext 已进入错误态会抛 IllegalStateException
+        // 并级联触发 /error 分发（表现为 AuthorizationDeniedException 噪音）。
+        AtomicBoolean disconnected = new AtomicBoolean(false);
+
         // 使用线程异步处理，避免阻塞主线程
         CompletableFuture.runAsync(() ->{
 
@@ -169,34 +175,45 @@ public abstract class BaseAgent {
 
                         // 发送每一步的结果（命名事件 tool，前端据此渲染"过程区"）
                         if (!safeSend(emitter, "tool", result)) {
+                            disconnected.set(true);
                             state = AgentState.FINISHED;
                             break;
                         }
 
                     }
                     // 检查是否超出步骤限制
-                    if(currentStep >= maxSteps && state != AgentState.FINISHED){
+                    if(!disconnected.get() && currentStep >= maxSteps && state != AgentState.FINISHED){
                         state = AgentState.FINISHED;
-                        safeSend(emitter, "tool", "执行结束：达到最大步骤(" + maxSteps + ")");
+                        if (!safeSend(emitter, "tool", "执行结束：达到最大步骤(" + maxSteps + ")")) {
+                            disconnected.set(true);
+                        }
                     }
 
                     // 发送最终回答（命名事件 answer，前端据此渲染"答案区"）
-                    if(!StringUtil.isBlank(lastAnswer)){
-                        safeSend(emitter, "answer", lastAnswer);
+                    if(!disconnected.get() && !StringUtil.isBlank(lastAnswer)){
+                        if (!safeSend(emitter, "answer", lastAnswer)) {
+                            disconnected.set(true);
+                        }
                     }
 
-                    // 正常完成
-                    emitter.complete();
+                    // 正常完成（客户端断连后不能再 complete，否则 AsyncContext 已进入错误态会抛 IllegalStateException）
+                    if(!disconnected.get()){
+                        completeQuietly(emitter);
+                    }
 
                 } catch (Exception e) {
                     state = AgentState.ERROR;
-                    log.error("执行智能体失败", e);
-
-                    try {
-                        emitter.send(SseEmitter.event().name("error").data("执行错误：" + e.getMessage()));
-                        emitter.complete();
-                    } catch (Exception ex) {
-                        emitter.completeWithError(ex);
+                    if (disconnected.get()) {
+                        // 客户端已断开，异常属预期（如最后时刻断连导致的 complete 失败），降级 INFO 不再打 ERROR
+                        log.info("SSE 客户端已断开，忽略执行异常（conversationId={}）：{}", conversationId, e.getMessage());
+                    } else {
+                        log.error("执行智能体失败", e);
+                        try {
+                            emitter.send(SseEmitter.event().name("error").data("执行错误：" + e.getMessage()));
+                            completeQuietly(emitter);
+                        } catch (Exception ex) {
+                            completeWithErrorQuietly(emitter, ex);
+                        }
                     }
 
                 } finally {
@@ -209,7 +226,7 @@ public abstract class BaseAgent {
                 }
 
             } catch (Exception e) {
-                emitter.completeWithError(e);
+                completeWithErrorQuietly(emitter, e);
             }
 
         });
@@ -221,8 +238,18 @@ public abstract class BaseAgent {
             log.warn("SSE connection timed out");
         });
 
+        // 客户端断连 / 异步错误回调：置断连标记，阻止后续 complete/send 触发 AsyncContext 非法访问。
+        // 日志降级 DEBUG：safeSend 已打印「客户端断开」、onCompletion 已打印「completed」，
+        // 此处 INFO 会与 safeSend 重复（断连时连打 3 条 INFO 噪音），故仅 debug 保留排查线索。
+        emitter.onError((e) -> {
+            disconnected.set(true);
+            log.debug("SSE 连接错误（客户端可能已断开，conversationId={}）：{}",
+                    conversationId, e == null ? "null" : e.getMessage());
+        });
+
         // 设置完成回调（修正：原先第二个 onTimeout 误写，应为 onCompletion）
         emitter.onCompletion(() -> {
+            disconnected.set(true);
             if(this.state == AgentState.RUNNING){
                 this.state = AgentState.FINISHED;
             }
@@ -306,6 +333,30 @@ public abstract class BaseAgent {
         } catch (IOException e) {
             log.info("SSE 连接已由客户端断开（发送 {} 时），停止输出（conversationId={}）", eventName, conversationId);
             return false;
+        }
+    }
+
+    /**
+     * SSE 静默完成：客户端断连后 AsyncContext 已进入错误态，此时调用 emitter.complete()
+     * 会抛 IllegalStateException 并级联触发 /error 分发（表现为 AuthorizationDeniedException 噪音）。
+     * 这里把这类「最后时刻断连」的竞态一并吞掉，避免噪音。
+     */
+    private void completeQuietly(SseEmitter emitter) {
+        try {
+            emitter.complete();
+        } catch (IllegalStateException e) {
+            log.info("SSE 连接在完成前已断开，忽略 complete 异常（conversationId={}）", conversationId);
+        }
+    }
+
+    /**
+     * SSE 静默以错误完成：仅在仍有意义的错误场景调用；客户端已断连时直接忽略。
+     */
+    private void completeWithErrorQuietly(SseEmitter emitter, Throwable t) {
+        try {
+            emitter.completeWithError(t);
+        } catch (Exception ignored) {
+            log.debug("SSE completeWithError 失败（客户端可能已断连），忽略：{}", ignored.getMessage());
         }
     }
 

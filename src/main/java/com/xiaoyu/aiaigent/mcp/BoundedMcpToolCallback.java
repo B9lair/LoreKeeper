@@ -32,16 +32,25 @@ public class BoundedMcpToolCallback implements ToolCallback {
     /** 动态注入键值（每次调用时计算，用于把事实性内容从 LLM 手中收回，如邮件正文），可空 */
     private final Supplier<Map<String, Object>> dynamicArgs;
 
+    /** 工具调用失败时的失效回调（连接失效后通知连接池清除缓存、下次重建），可空 */
+    private final Runnable invalidateCallback;
+
     public BoundedMcpToolCallback(McpSyncClient mcpClient, Tool tool, Map<String, Object> injectedArgs) {
-        this(mcpClient, tool, injectedArgs, null);
+        this(mcpClient, tool, injectedArgs, null, null);
     }
 
     public BoundedMcpToolCallback(McpSyncClient mcpClient, Tool tool, Map<String, Object> injectedArgs,
                                   Supplier<Map<String, Object>> dynamicArgs) {
+        this(mcpClient, tool, injectedArgs, dynamicArgs, null);
+    }
+
+    public BoundedMcpToolCallback(McpSyncClient mcpClient, Tool tool, Map<String, Object> injectedArgs,
+                                  Supplier<Map<String, Object>> dynamicArgs, Runnable invalidateCallback) {
         this.mcpClient = mcpClient;
         this.tool = tool;
         this.injectedArgs = injectedArgs;
         this.dynamicArgs = dynamicArgs;
+        this.invalidateCallback = invalidateCallback;
     }
 
     @Override
@@ -62,7 +71,16 @@ public class BoundedMcpToolCallback implements ToolCallback {
         if (dynamicArgs != null) {
             arguments.putAll(dynamicArgs.get()); // 动态键值最后注入，覆盖 LLM 填写的值
         }
-        CallToolResult response = this.mcpClient.callTool(new CallToolRequest(this.tool.name(), arguments));
-        return ModelOptionsUtils.toJsonString(response.content());
+        try {
+            CallToolResult response = this.mcpClient.callTool(new CallToolRequest(this.tool.name(), arguments));
+            return ModelOptionsUtils.toJsonString(response.content());
+        }
+        catch (Exception e) {
+            // 连接失效（如 MCP Server 重启）等调用异常 → 触发失效回调，让连接池清除缓存、下次重建
+            if (invalidateCallback != null) {
+                invalidateCallback.run();
+            }
+            throw e;
+        }
     }
 }

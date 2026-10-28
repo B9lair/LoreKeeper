@@ -223,11 +223,14 @@ public class BearerSseClientTransport implements ClientMcpTransport {
                     .build();
 
             return Mono.fromFuture(
-                    httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding()).thenAccept(response -> {
+                    httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding()).thenCompose(response -> {
                         int status = response.statusCode();
                         if (status != 200 && status != 201 && status != 202 && status != 206) {
                             logger.error("发送 MCP 消息失败，状态码: {}", status);
+                            return CompletableFuture.failedFuture(
+                                    new RuntimeException("发送 MCP 消息失败，状态码: " + status));
                         }
+                        return CompletableFuture.completedFuture(null);
                     }));
         }
         catch (IOException e) {

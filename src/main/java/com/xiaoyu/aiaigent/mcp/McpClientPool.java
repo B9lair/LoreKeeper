@@ -76,7 +76,8 @@ public class McpClientPool {
                     return null;
                 }
                 clients.computeIfAbsent(workId, k -> new CopyOnWriteArrayList<>()).add(client);
-                ToolCallback callback = new BoundedMcpToolCallback(client, tool, injectedArgs);
+                ToolCallback callback = new BoundedMcpToolCallback(client, tool, injectedArgs, null,
+                        () -> invalidate(workId, toolName));
                 toolCache.computeIfAbsent(workId, k -> new ConcurrentHashMap<>()).put(toolName, callback);
                 return callback;
             }
@@ -103,6 +104,29 @@ public class McpClientPool {
             .filter(t -> toolName.equals(t.name()))
             .findFirst()
             .orElse(null);
+    }
+
+    /** 工具调用失败后清除该 workId 的缓存并关闭旧连接，下次调用时重建（MCP Server 重启等场景） */
+    private void invalidate(long workId, String toolName) {
+        log.warn("MCP 工具调用失败，清除连接缓存以支持重建：workId={} tool={}", workId, toolName);
+        List<McpSyncClient> list = clients.remove(workId);
+        if (list != null) {
+            for (McpSyncClient client : list) {
+                try {
+                    client.close();
+                }
+                catch (Exception e) {
+                    log.warn("关闭失效 MCP 客户端失败 workId={}: {}", workId, e.getMessage());
+                }
+            }
+        }
+        Map<String, ToolCallback> byTool = toolCache.get(workId);
+        if (byTool != null) {
+            byTool.remove(toolName);
+            if (byTool.isEmpty()) {
+                toolCache.remove(workId);
+            }
+        }
     }
 
     @PreDestroy
