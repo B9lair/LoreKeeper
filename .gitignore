@@ -9,6 +9,14 @@ chat-memory/
 node_modules/
 dist/
 tmp
+.playwright-cli/
+# Office 打开的临时锁文件
+~$*
+# 简历素材（私人文件，不入库）
+简历-LoreKeeper项目素材.docx
+# 根目录文档只提交 README.md，其余方案/日志/纪要均不入库
+/*.md
+!README.md
 .codebuddy/
 
 

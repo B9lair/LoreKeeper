@@ -16,9 +16,9 @@ spring:
 
   # ---------- 数据库（PostgreSQL + pgvector）----------
   datasource:
-    # 注意：本地/云 RDS 若未开启 SSL，必须加 ?sslmode=disable，
-    # 否则会报「服务器不支援 SSL 连线」导致连库失败。
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:LoreKeeper_DB}?sslmode=disable
+    # sslmode 建议 prefer：优先尝试 SSL，服务端不支持时回落明文（兼容两种 RDS 配置）。
+    # 注意不要写死 require —— 实测部分 RDS 实例会返回「服务器不支援 SSL 连线」。
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:LoreKeeper_DB}?sslmode=prefer
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
 

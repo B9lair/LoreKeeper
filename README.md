@@ -4,6 +4,10 @@
 
 **技术标签**：`Java 21` `Spring Boot 3.5` `Spring AI (M6)` `ReAct Agent` `MCP` `RAG` `pgvector` `Hybrid Search / RRF / Rerank` `多租户隔离` `Vue 3 + Vite` `SSE 流式`
 
+![对话台：意图路由徽章 + Agent 工具调用轨迹 + Inspector 过程面板](docs/screenshots/01-chat.png)
+
+> **对话台**：左侧多会话记忆，中间意图路由徽章（世界观问答 · QUERY）与 Agent 过程（2 步），右侧 **Inspector** 实时展示工具调用 Trace —— `Step 1 · settingSearch`（RAG 检索，带命中片段）→ `Step 2 · doTerminate`（终止协议）。Agent 的每一步决策都可见、可追溯。
+
 ---
 
 ## 目录
@@ -220,6 +224,26 @@ flowchart TB
 | **测试台** `TestLab.vue`   | `/test`   | MCP 工具真调（5 个工具 + 连通性 chip）、RAG 检索测试、意图路由测试                           |
 | **数据** `DataManage.vue`  | `/data`   | 作品（新建/切换/编辑/删除）、设定、伏笔三 Tab CRUD                                           |
 
+**知识库 —— RAG 分块可视化**：左侧章节/设定库/伏笔库三 Tab，右侧每个 chunk 展示 `type` chip、`ch#N`、字数、`parentId` 与原文，可直观检查分块策略与索引质量：
+
+![知识库：RAG 分块可视化，展示 chunk 元数据与原文](docs/screenshots/02-knowledge.png)
+
+**测试台 —— MCP 工具真调**：顶部实时连通性状态（`doc-parser ●` / `database ●`），5 个 MCP 工具（`parse_document` / `query_database` / `split_chapters` / `parse_document_content` / `detect_encoding`）逐一真调，另有 RAG 检索测试与意图路由调试：
+
+![测试台：MCP 工具连通性与真调、RAG 检索测试、意图路由调试](docs/screenshots/04-testlab.png)
+
+**设定库 —— 结构化四元组落库**：章节上传后由 `EntityExtractor` 抽取的 `实体 / 属性 / 值 / 版本`（含版本号，值变化自动 +1），保存时触发反向冲突扫描：
+
+![设定库：章节上传自动抽取的设定四元组（实体/属性/值/版本）](docs/screenshots/05b-settings.png)
+
+**一致性审查**：上传 TXT/MD/PDF/Word 或粘贴正文，输出矛盾清单与未回收伏笔；`CONFLICT` 进入下方**待确认队列**，人工采纳/驳回（人机协同）：
+
+![一致性审查：上传章节触发审查，冲突进入待确认队列](docs/screenshots/03-review.png)
+
+**数据管理 —— 多作品切换**：切换作品即后端重签 JWT（`workId` 随 token 走，前端不传参），全站数据随 `workStore.version` 广播刷新：
+
+![数据管理：多作品列表与切换](docs/screenshots/05-data.png)
+
 ### 3.6 对话记忆与多会话
 
 - `FileBasedChatMemory`（Kryo 序列化到 `{chat-memory-dir}/{userId}_{chatId}.kryo`）；
@@ -407,7 +431,7 @@ cp lore-database-mcp-server/src/main/resources/application.yaml.example \
 ```yaml
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/LoreKeeper_DB?sslmode=disable
+    url: jdbc:postgresql://localhost:5432/LoreKeeper_DB?sslmode=prefer
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
   ai:
@@ -419,7 +443,7 @@ spring:
 ```
 
 > 建议通过环境变量注入：`DB_USERNAME` / `DB_PASSWORD` / `DASHSCOPE_API_KEY` / `SEARCH_API_KEY` / `LOREKEEPER_JWT_SECRET`。
-> ⚠️ `?sslmode=disable` 不能省 —— 未开启 SSL 的实例不带该参数会报「服务器不支援 SSL 连线」。
+> ⚠️ `?sslmode=prefer` 建议显式写明：实测云 RDS 在 `disable`（明文被 pg_hba 拒绝）与 `require`（报「服务器不支援 SSL 连线」）下都可能失败，`prefer` 两种配置均兼容。
 
 ### 3. 启动
 
@@ -479,9 +503,7 @@ ai-aigent/
 ├── lore-doc-parser-mcp-server/  # MCP · :8124 · parse_document / split_chapters /
 │                                #             parse_document_content / detect_encoding
 ├── xiaoyu-ai-agent-frontend/    # Vue 3 前端（src 25 文件 / ~3.7k 行）
-├── 项目重构优化与实施指南-LoreKeeper方案.md   # 整体方案与实施步骤
-├── 开发日志.md                  # 按步骤的实施记录与关键决策
-├── 后端接口与数据模型.md         # 接口契约与表结构
+├── docs/screenshots/            # README 界面截图
 └── Dockerfile / nginx.conf
 ```
 
