@@ -367,21 +367,26 @@ flowchart LR
 
 ## 6. 效果评测
 
-评测体系分三层：**评测器（纯函数，可单测） + 运行器（真连 DB/LLM） + 数据集（JSON，含 golden 样本）**。
+评测体系分三层：**评测器（纯函数，可单测） + 运行器（真连 DB/LLM，`@Disabled`） + 数据集（JSON，含 golden 样本）**，覆盖「检索 / 归因 / 回答 / Agent」四层（完整方案见 `docs/rag-agent-eval-plan.md`）。
 
-| 评测器                 | 指标                                              | 结果                                                                                         |
-| ---------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `ConsistencyEvaluator` | 混淆矩阵 → Precision / Recall / **F1** / Accuracy | 别名归一前 F1=0.625、Recall=0.714 → **归一后 F1=0.875、Recall=1.000**（14 样本，冲突零漏检） |
-| `RagEvaluator`         | **Recall@K** / **MRR**                            | `Recall@5 = 1.0`、`MRR = 1.0`                                                                |
-| `ExtractionEvaluator`  | 实体 P/R/F1 + 伏笔 Accuracy / MAE                 | 真连 LLM，默认 `@Disabled` 隔离（不进 CI）                                                   |
+| 评测器                     | 指标                                                                     | 结果                                                                                          |
+| -------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `ConsistencyEvaluator`     | 混淆矩阵 → Precision / Recall / **F1** / Accuracy                        | 别名归一前 F1=0.625、Recall=0.714 → **归一后 F1=0.875、Recall=1.000**（14 样本，冲突零漏检） |
+| `RagEvaluator`             | **Recall@K** / **MRR** / ContextPrecision@K                             | **`Recall@5 = 1.0`、`MRR = 1.0`**；ContextPrecision 纯函数单测通过                          |
+| `LlmJudgeService`（Judge） | Faithfulness / AnswerRelevancy / AnswerAccuracy / unsupportedClaims      | 端到端 10 样本（7 正 + 3 负）**ContextRecall / Faithfulness / Relevancy / Accuracy 全 1.00**   |
+| `ScoreAggregator`          | 加权总分 `0.35R+0.25F+0.25A+0.15Rel` + 失败定位（检索/生成掉分）         | **加权总分 = 1.0000**，失败回放无失败样本（10/10 满分）                                        |
+| `AgentEvaluator`           | Tool Call F1 + Intent Accuracy + Goal Accuracy                           | **Intent Accuracy=1.0（6/6）、Tool Call F1=1.0、Goal Accuracy=1.0（5/5）**                     |
+| `ExtractionEvaluator`      | 实体 P/R/F1 + 伏笔 Accuracy / MAE                                        | 真连 LLM，默认 `@Disabled` 隔离                                                              |
 
 **关键设计**：
 
 - 一致性评测聚焦「归并判定」这一**确定性环节** —— 直接用 `{entity, attribute, valueA, valueB, isConflict}` 驱动 `SettingMergeService.merge`，不端到端走 LLM 抽取（否则随机、无法进 CI）；
 - RAG 命中判定用 `metadata.entityId`，不用 pgvector 生成的 `Document.id`（UUID）；
-- 负样本刻意用"同值不同实体"而非"无关实体"（后者走 `NEW` 分支，失去区分度）。
+- 负样本刻意用"同值不同实体"而非"无关实体"（后者走 `NEW` 分支，失去区分度）；
+- **评测器（Evaluator/Judge）放 `src/main`、进 CI；运行器（真连 DB/LLM）放 `src/test`、`@Disabled`**，遵守"确定性环节不进 LLM"；
+- 端到端 QA 的 3 条**无答案负样本**暴露并修复了「无答案场景 LLM 空回答导致前端空白」的 bug（`QUERY_SOP` 强化 + `ToolCallAgent.act` 兜底）——评测体系能反哺产品缺陷。
 
-> 运行：`mvnw.cmd -Dtest=ConsistencyEvalRunnerTest test`（需真实 PostgreSQL）；抽取评测先删除 `@Disabled` 再跑 `ExtractionEvalRunnerTest`。
+> 运行：纯函数单测 `mvnw.cmd -Dtest=RagEvaluatorTest,ConsistencyEvaluatorTest,AgentEvaluatorTest,ScoreAggregatorTest test`（无需 DB）；真连运行器（`QaEvalRunnerTest` / `IntentEvalRunnerTest` / `AgentEvalRunnerTest`）需先删 `@Disabled`。
 
 ---
 
@@ -497,7 +502,7 @@ ai-aigent/
 │   ├── common/         # TenantContext / TenantFilter
 │   ├── chatmemory/     # FileBasedChatMemory（Kryo）
 │   ├── tools/          # SettingSearchTool / TerminateTool / WebSearch / PDFGeneration
-│   ├── eval/           # 3 个纯函数评测器（可单测、可复用）
+│   ├── eval/           # 评测器：Consistency/Rag/Score/Agent Evaluator（纯函数）+ LlmJudgeService
 │   └── config/         # CORS / 全局异常处理
 ├── lore-database-mcp-server/     # MCP · :8125 · query_database（只读、白名单）
 ├── lore-doc-parser-mcp-server/  # MCP · :8124 · parse_document / split_chapters /
@@ -546,6 +551,7 @@ ai-aigent/
 | `pending_conflict`   | **待确认队列**       | entity / attribute / old_value / new_value / evidence / status                                   |
 | `consistency_report` | 审查报告             | chapter_id / report_json JSONB                                                                   |
 | `vector_store`       | 语义索引             | content / **metadata JSONB（workId/type/entityId/parentId/chapterNo）** / embedding vector(1536) |
+| `eval_trace`         | 评测 trace（线上回灌） | work_id / user_message / intent / tool_sequence / answer / loop_guard / step_count / cost_ms |
 
 设计要点：**业务表存"可精确查询的事实"，`vector_store` 存"可语义召回的片段"**，两者必须同步维护 —— 任何落库/更新/删除都要连带维护向量索引。
 
@@ -570,5 +576,7 @@ ai-aigent/
 - [ ] `pending_conflict` / `vector_store` DDL 补齐到 `db/schema.sql`；
 - [ ] 密钥全面改为环境变量注入；
 - [ ] 前端组件化拆分（弹窗/表格当前在各页重复实现）。
+- [ ] 评测集扩充难样本（语义等价 / 多跳 / 跨章矛盾），提升端到端 QA 区分度；
+- [ ] 线上失败样本回灌闭环（`eval_trace` 已落表，补自动回灌工具 / 评测报告面板）。
 
 --

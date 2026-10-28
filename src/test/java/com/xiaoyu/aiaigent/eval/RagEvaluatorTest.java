@@ -72,4 +72,28 @@ class RagEvaluatorTest {
         List<RagEvaluator.RagSample> samples = List.of(new RagEvaluator.RagSample("q", List.of("s1")));
         assertThrows(IllegalArgumentException.class, () -> evaluator.evaluate(samples, List.of(), 5));
     }
+
+    @Test
+    void contextPrecisionAtK_computesPurity() {
+        // 前 3 个结果命中 2 个 → 2/3
+        double p1 = evaluator.contextPrecisionAtK(
+                List.of("s1", "s3", "s2", "s9"), List.of("s1", "s2"), 3);
+        assertEquals(2.0 / 3.0, p1, 1e-9);
+
+        // 前 K 全部命中 → 1.0
+        double p2 = evaluator.contextPrecisionAtK(
+                List.of("s1", "s2"), List.of("s1", "s2"), 5);
+        assertEquals(1.0, p2, 1e-9);
+
+        // 前 K 全部未命中 → 0.0
+        double p3 = evaluator.contextPrecisionAtK(
+                List.of("s7", "s8"), List.of("s1"), 5);
+        assertEquals(0.0, p3, 1e-9);
+    }
+
+    @Test
+    void contextPrecisionAtK_emptyOrNull_returnsZero() {
+        assertEquals(0.0, evaluator.contextPrecisionAtK(List.of(), List.of("s1"), 5), 1e-9);
+        assertEquals(0.0, evaluator.contextPrecisionAtK(null, List.of("s1"), 5), 1e-9);
+    }
 }

@@ -62,5 +62,122 @@
       "expectedEntities": ["青阳城", "主角"],
       "expectedForeshadowCount": 0
     }
+  ],
+  "qa": [
+    {
+      "question": "主角惯用哪只手拿剑？",
+      "referenceAnswer": "主角林玄天生左撇子，惯用左手持剑。",
+      "goldenContextIds": ["9003"],
+      "goldenFacts": ["左撇子", "左手持剑"],
+      "badCases": ["右手", "剑修"],
+      "difficulty": "easy"
+    },
+    {
+      "question": "女二的佩剑叫什么名字？",
+      "referenceAnswer": "女二柳如烟的佩剑名为青霜，能斩断灵石。",
+      "goldenContextIds": ["9006"],
+      "goldenFacts": ["青霜"],
+      "badCases": [],
+      "difficulty": "easy"
+    },
+    {
+      "question": "青阳城为什么四季如春？",
+      "referenceAnswer": "青阳城靠灵石阵供暖，四季如春。",
+      "goldenContextIds": ["9001"],
+      "goldenFacts": ["灵石阵"],
+      "badCases": ["地火"],
+      "difficulty": "easy"
+    },
+    {
+      "question": "主角的师父是谁？",
+      "referenceAnswer": "主角林玄的师父是青阳城前任城主。",
+      "goldenContextIds": ["9005"],
+      "goldenFacts": ["前任城主"],
+      "badCases": [],
+      "difficulty": "easy"
+    },
+    {
+      "question": "青阳城的护城大阵由什么驱动？",
+      "referenceAnswer": "青阳城护城大阵由九枚灵石驱动。",
+      "goldenContextIds": ["9004"],
+      "goldenFacts": ["九枚灵石"],
+      "badCases": ["五枚灵石"],
+      "difficulty": "medium"
+    },
+    {
+      "question": "青阳城城主最近在做什么？",
+      "referenceAnswer": "青阳城城主闭关十年未出关。",
+      "goldenContextIds": ["9008"],
+      "goldenFacts": ["闭关十年"],
+      "badCases": [],
+      "difficulty": "medium"
+    },
+    {
+      "question": "主角师父曾经执掌的城池，其护城大阵靠什么驱动？",
+      "referenceAnswer": "主角的师父是青阳城前任城主，青阳城护城大阵由九枚灵石驱动。",
+      "goldenContextIds": ["9005", "9004"],
+      "goldenFacts": ["前任城主", "九枚灵石"],
+      "badCases": ["五枚灵石"],
+      "difficulty": "hard"
+    },
+    {
+      "question": "女主的佩剑叫什么名字？",
+      "referenceAnswer": "库中没有「女主」的相关设定，无法回答其佩剑。",
+      "goldenContextIds": [],
+      "goldenFacts": [],
+      "badCases": ["青霜", "柳如烟"],
+      "difficulty": "hard"
+    },
+    {
+      "question": "主角的金手指是什么？",
+      "referenceAnswer": "未检索到主角金手指的相关设定。",
+      "goldenContextIds": [],
+      "goldenFacts": [],
+      "badCases": [],
+      "difficulty": "medium"
+    },
+    {
+      "question": "这个世界存在龙族吗？",
+      "referenceAnswer": "未检索到龙族的相关设定，无法确定。",
+      "goldenContextIds": [],
+      "goldenFacts": [],
+      "badCases": [],
+      "difficulty": "easy"
+    }
+  ],
+  "intent": [
+    { "message": "主角的师父是谁", "expectedIntent": "QUERY" },
+    { "message": "帮我写第50章", "expectedIntent": "WRITE" },
+    { "message": "审查一下我刚写的这一章有没有矛盾", "expectedIntent": "REVIEW" },
+    { "message": "我埋的那些伏笔现在回收了几个", "expectedIntent": "FORESHADOW" },
+    { "message": "今天天气怎么样", "expectedIntent": "CHAT" },
+    { "message": "女二的佩剑叫什么名字", "expectedIntent": "QUERY" }
+  ],
+  "agent": [
+    {
+      "question": "女二的佩剑叫什么名字？",
+      "expectedTools": ["settingSearch"],
+      "successCriteria": "答案包含「青霜」"
+    },
+    {
+      "question": "主角惯用哪只手拿剑？",
+      "expectedTools": ["settingSearch"],
+      "successCriteria": "答案说明主角是左撇子、惯用左手持剑"
+    },
+    {
+      "question": "青阳城的护城大阵由什么驱动？",
+      "expectedTools": ["settingSearch"],
+      "successCriteria": "答案包含「九枚灵石」"
+    },
+    {
+      "question": "主角的师父是谁？",
+      "expectedTools": ["settingSearch"],
+      "successCriteria": "答案说明主角的师父是青阳城前任城主"
+    },
+    {
+      "question": "青阳城城主最近在做什么？",
+      "expectedTools": ["settingSearch"],
+      "successCriteria": "答案包含「闭关」"
+    }
   ]
 }

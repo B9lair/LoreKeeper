@@ -43,6 +43,9 @@ public abstract class BaseAgent {
     private int maxSteps = 10;
     private int currentStep = 0;
 
+    // 本轮执行开始时间戳（毫秒，run/runstream 开头记录；埋点算耗时用，getElapsedMs 读取）
+    private long startedAt;
+
     // LLM
     private ChatClient chatClient;
 
@@ -60,6 +63,9 @@ public abstract class BaseAgent {
 
     // 会话 ID（多轮记忆按此隔离；为空则不启用）
     private String conversationId;
+
+    // 租户 workId（eval_trace 落库用，LoreAgentFactory.create 时注入；可为空）
+    private Long workId;
 
     // 记忆回看条数（历史最多注入多少条消息）
     private static final int MEMORY_RETRIEVE_SIZE = 10;
@@ -80,6 +86,9 @@ public abstract class BaseAgent {
 
         // 更改状态
         state = AgentState.RUNNING;
+
+        // 记录开始时间（埋点：端到端耗时）
+        this.startedAt = System.currentTimeMillis();
 
         // 记录消息上下文
         messageList.add(new UserMessage(userPrompt));
@@ -145,6 +154,8 @@ public abstract class BaseAgent {
 
                 // 更改状态
                 state = AgentState.RUNNING;
+                // 记录开始时间（埋点：端到端耗时）
+                this.startedAt = System.currentTimeMillis();
                 // 记录消息上下文（先注入历史记忆，再追加本轮用户输入）
                 injectHistory(userPrompt);
 
@@ -199,6 +210,8 @@ public abstract class BaseAgent {
                 } finally {
                     // 无论 SSE 连接是否异常（如客户端断开），都先持久化本轮对话，避免记忆丢失
                     persistTurn(userPrompt);
+                    // 埋点落库（eval_trace，阶段三 3.5）：子类 ToolCallAgent 实现，记录意图/工具序列/回答/loopGuard/步数/耗时
+                    onFinish(userPrompt);
                     // 清理资源
                     this.cleanup();
                 }
@@ -234,6 +247,22 @@ public abstract class BaseAgent {
      * @return
      */
     public abstract String step();
+
+    /**
+     * 本轮端到端耗时（毫秒）。run/runstream 尚未开始时返回 0。
+     */
+    public long getElapsedMs() {
+        return startedAt == 0 ? 0 : System.currentTimeMillis() - startedAt;
+    }
+
+    /**
+     * 执行结束回调（供子类埋点，如 ToolCallAgent 落 eval_trace）。
+     * 仅在 runstream 的 finally（persistTurn 之后、cleanup 之前）调用；
+     * run() 同步路径不调用，避免评测运行器污染线上 trace。
+     */
+    protected void onFinish(String userPrompt) {
+        // 默认空实现
+    }
 
     /**
      * 清理资源

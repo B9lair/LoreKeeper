@@ -4,6 +4,7 @@ import com.xiaoyu.aiaigent.advisor.MyLoggerAdvisor;
 import com.xiaoyu.aiaigent.common.TenantContext;
 import com.xiaoyu.aiaigent.mcp.McpClientPool;
 import com.xiaoyu.aiaigent.rag.HybridSearchService;
+import com.xiaoyu.aiaigent.repository.EvalTraceRepository;
 import com.xiaoyu.aiaigent.tools.SettingSearchTool;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -36,6 +37,8 @@ public class LoreAgentFactory {
     private final ToolCallback[] queryTools;
     private final ToolCallback[] foreshadowTools;
 
+    private final EvalTraceRepository evalTraceRepository;
+
     public LoreAgentFactory(ChatModel dashscopeChatModel,
                             HybridSearchService hybridSearchService,
                             McpClientPool mcpClientPool,
@@ -43,7 +46,8 @@ public class LoreAgentFactory {
                             ToolCallback[] writeTools,
                             ToolCallback[] reviewTools,
                             ToolCallback[] queryTools,
-                            ToolCallback[] foreshadowTools) {
+                            ToolCallback[] foreshadowTools,
+                            EvalTraceRepository evalTraceRepository) {
         this.chatModel = dashscopeChatModel;
         this.hybridSearchService = hybridSearchService;
         this.mcpClientPool = mcpClientPool;
@@ -52,6 +56,7 @@ public class LoreAgentFactory {
         this.reviewTools = reviewTools;
         this.queryTools = queryTools;
         this.foreshadowTools = foreshadowTools;
+        this.evalTraceRepository = evalTraceRepository;
     }
 
     public ToolCallAgent create(IntentRouter.Intent intent, TenantContext.Tenant tenant, String conversationId) {
@@ -80,6 +85,9 @@ public class LoreAgentFactory {
         // 绑定会话记忆：conversationId 用于多轮记忆隔离（为空则不启用）
         agent.setConversationId(conversationId);
         agent.setChatMemory(chatMemory);
+        // eval_trace 埋点：绑定 workId + repository（阶段三 3.5，runstream 结束时落表）
+        agent.setWorkId(workId);
+        agent.setEvalTraceRepository(evalTraceRepository);
         return agent;
     }
 
@@ -138,7 +146,8 @@ public class LoreAgentFactory {
     static final String QUERY_SOP = """
         你是「世界观问答」工作流。自然语言问设定，语义检索 + 结构化查询回答。
         流程：① 调 settingSearch 语义检索 ② 需精确字段（如伏笔状态）时调 queryDatabase ③ 综合回答并注明出处。
-        同一个 query 只检索一次，禁止重复检索；无论检索结果是否理想，都必须基于已有结果如实回答，回答后立即调用 doTerminate 结束。""";
+        同一个 query 只检索一次，禁止重复检索；无论检索结果是否理想，都必须基于已有结果如实回答，回答后立即调用 doTerminate 结束。
+        若检索结果与问题主体不匹配（如用户问"女主"但只检索到"女二"），必须如实输出"未找到女主相关设定"这类结论，禁止把不匹配的结果套用到答案上，也禁止不输出任何文字就调用 doTerminate 结束。""";
 
     static final String FORESHADOW_SOP = """
         你是「伏笔追踪」工作流，负责查询并汇总未回收伏笔。

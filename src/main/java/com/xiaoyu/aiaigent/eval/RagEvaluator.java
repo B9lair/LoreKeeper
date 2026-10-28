@@ -89,4 +89,22 @@ public class RagEvaluator {
         int n = samples.size();
         return new RagMetrics(k, recallSum / n, rrSum / n, n);
     }
+
+    /**
+     * 计算 Context Precision@K：前 K 个检索结果中命中期望条目的比例（"检索纯度"）。
+     * 与 Recall@K（覆盖率）互补：Recall 看"证据找全没"，Precision 看"带回的噪声多不多"。
+     * 分母取实际前 K 结果数（返回不足 K 时不人为拉低纯度）。
+     */
+    public double contextPrecisionAtK(List<String> retrievedIds, List<String> expectedIds, int k) {
+        if (retrievedIds == null || retrievedIds.isEmpty()) {
+            return 0.0;
+        }
+        List<String> topK = retrievedIds.stream().limit(k).toList();
+        if (topK.isEmpty()) {
+            return 0.0;
+        }
+        List<String> expected = expectedIds == null ? List.of() : expectedIds;
+        long hit = topK.stream().filter(expected::contains).count();
+        return (double) hit / topK.size();
+    }
 }

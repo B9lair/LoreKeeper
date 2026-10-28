@@ -5,6 +5,7 @@ import cn.hutool.core.util.StrUtil;
 import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatOptions;
 
 import com.xiaoyu.aiaigent.agent.model.AgentState;
+import com.xiaoyu.aiaigent.repository.EvalTraceRepository;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.extern.slf4j.Slf4j;
@@ -15,10 +16,12 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.ModelOptionsUtils;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.model.tool.ToolExecutionResult;
 import org.springframework.ai.tool.ToolCallback;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -48,6 +51,12 @@ public class ToolCallAgent extends ReActAgent{
     private String lastToolSignature;
     private int repeatedCallCount = 0;
     private boolean loopGuardTriggered = false;
+
+    // 本次执行实际调用的工具名序列（按调用顺序，含 doTerminate；埋点/Agent 评测用，@Data 生成 getToolCallSequence）
+    private final List<String> toolCallSequence = new ArrayList<>();
+
+    // eval_trace 落库（可选，LoreAgentFactory.create 时注入；为空则不落表）
+    private EvalTraceRepository evalTraceRepository;
 
     public ToolCallAgent(ToolCallback[] availableTools){
         super();
@@ -174,6 +183,8 @@ public class ToolCallAgent extends ReActAgent{
         setMessageList(toolExecutionResult.conversationHistory());
         // 当前工具调用的结果
         ToolResponseMessage toolResponseMessage = (ToolResponseMessage) CollUtil.getLast(toolExecutionResult.conversationHistory());
+        // 埋点：记录本次实际调用的工具名（按顺序，供 Agent 评测 Tool Call F1 与 eval_trace 落库）
+        toolResponseMessage.getResponses().forEach(response -> toolCallSequence.add(response.name()));
         String results = toolResponseMessage.getResponses().stream()
                 .map(response -> "工具" + response.name() + "完成了它的任务！结果：" + response.responseData())
                 .collect(Collectors.joining("\n"));
@@ -187,6 +198,10 @@ public class ToolCallAgent extends ReActAgent{
             String finalText = lastAssistantMessage.getText();
             if (StrUtil.isNotBlank(finalText)) {
                 setLastAnswer(finalText);
+            } else if (StrUtil.isBlank(getLastAnswer())) {
+                // 兜底：doTerminate 那轮文本为空（如"问女主只检索到女二"时 LLM 空着结束），
+                // 避免 lastAnswer 为空导致前端空白
+                setLastAnswer("（未找到与问题直接相关的设定，请换个更具体的问法再试。）");
             }
             setState(AgentState.FINISHED);
         }
@@ -196,5 +211,28 @@ public class ToolCallAgent extends ReActAgent{
 
     }
 
+    /**
+     * 执行结束埋点（阶段三 3.5）：把本轮意图 / 工具序列 / 回答 / loopGuard / 步数 / 耗时落 eval_trace。
+     * 仅在 runstream 路径由 BaseAgent finally 调用；evalTraceRepository 为空（如评测运行器）则跳过。
+     */
+    @Override
+    protected void onFinish(String userPrompt) {
+        if (evalTraceRepository == null) {
+            return;
+        }
+        try {
+            evalTraceRepository.save(new EvalTraceRepository.EvalTrace(
+                    getWorkId(),
+                    userPrompt,
+                    getIntent(),
+                    ModelOptionsUtils.toJsonString(toolCallSequence),
+                    getLastAnswer(),
+                    loopGuardTriggered,
+                    getCurrentStep(),
+                    getElapsedMs()));
+        } catch (Exception e) {
+            log.warn("eval_trace 落库失败：{}", e.getMessage());
+        }
+    }
 
 }
